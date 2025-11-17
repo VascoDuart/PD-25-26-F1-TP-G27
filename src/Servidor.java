@@ -150,6 +150,78 @@ public class Servidor {
         }
     }
 
+    //verifica se server principal tem bd local, se nao tiver cria nova bd versao 0
+    private void verificarBDLocal() {
+        File dbFile = new File(this.dbPath);
+
+        if (!dbFile.exists()) {
+            System.out.println("[Principal] Ficheiro de BD não encontrado. A criar nova BD (Versão 0)...");
+        } else {
+            System.out.println("[Principal] BD local encontrada. A usar: " + this.dbPath);
+        }
+    }
+
+    //server backup obtém bd do server principal, atraves de tcp
+    private boolean obterBDdoPrincipal(InetAddress ipPrincipal, int portoDB_Principal) {
+        System.out.println("[Backup] A obter cópia da BD de " + ipPrincipal.getHostAddress() + ":" + portoDB_Principal);
+
+        try (Socket socket = new Socket(ipPrincipal, portoDB_Principal);
+             InputStream is = socket.getInputStream();
+             FileOutputStream fos = new FileOutputStream(this.dbPath)) {
+
+
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+
+            System.out.println("[Backup] Recebendo ficheiro da BD...");
+            while ((bytesRead = is.read(buffer)) > 0) {
+                fos.write(buffer, 0, bytesRead);
+            }
+
+            System.out.println("[Backup] Transferência da BD concluída com sucesso.");
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("[Backup] Erro ao obter BD do Principal. A terminar execução: " + e.getMessage());
+            return false;
+        }
+    }
+
+    //thread do server principal que aceita pedidos de copia da bd
+    private void aceitarPedidosBD() {
+        new Thread(() -> {
+            try {
+                while (true) {
+                    System.out.println("[AceitarBD] À espera de pedidos de cópia da BD...");
+                    Socket socket = srvSocketDB.accept();
+                    System.out.println("[AceitarBD] Pedido de cópia da BD recebido.");
+
+                    new Thread(() -> enviarBD(socket)).start();
+                }
+            } catch (IOException e) {
+                System.err.println("[AceitarBD] Erro na thread de escuta da BD: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    //envia o ficheiro da bd para o server backup
+    private void enviarBD(Socket socket) {
+        try (OutputStream os = socket.getOutputStream();
+             FileInputStream fis = new FileInputStream(this.dbPath)) {
+
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+
+            while ((bytesRead = fis.read(buffer)) > 0) {
+                os.write(buffer, 0, bytesRead);
+            }
+            os.flush();
+            System.out.println("[AceitarBD] Ficheiro BD enviado com sucesso.");
+
+        } catch (IOException e) {
+            System.err.println("[AceitarBD] Erro ao enviar ficheiro BD: " + e.getMessage());
+        }
+    }
 
     /**
      * Método Main para arrancar o Servidor.
