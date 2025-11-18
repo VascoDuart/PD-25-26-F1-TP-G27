@@ -96,9 +96,24 @@ public class Servidor {
         }
     }
 
-    // Simulação: Não tenta ler ficheiros reais para não dar erro
+    // Substitui o teu método antigo por este:
     private void verificarBDLocal() {
-        System.out.println("[Principal] (Simulação) BD verificada em " + this.dbPath);
+        System.out.println("[Principal] A verificar Base de Dados...");
+
+        DatabaseManager db = new DatabaseManager(this.dbPath);
+
+        try {
+            db.conectar();      // Cria o ficheiro .db se não existir
+            db.criarTabelas();  // Cria as tabelas lá dentro
+            db.desconectar();   // Fecha a ligação (o servidor abre quando precisar)
+
+            System.out.println("[Principal] BD pronta e inicializada com sucesso.");
+
+        } catch (Exception e) {
+            System.err.println("[Principal] ERRO CRÍTICO NA BD: " + e.getMessage());
+            // Se a BD falha, o servidor não pode funcionar
+            System.exit(1);
+        }
     }
 
     // Simulação: Conecta-se mas não guarda ficheiro

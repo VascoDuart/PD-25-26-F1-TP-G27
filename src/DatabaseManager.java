@@ -1,0 +1,66 @@
+import java.sql.*;
+import java.io.File;
+
+public class DatabaseManager {
+
+    private String dbPath;
+    private Connection conn;
+
+    public DatabaseManager(String dbPath) {
+        this.dbPath = dbPath;
+    }
+
+    // 1. Ligar à Base de Dados
+    public void conectar() throws SQLException {
+        String url = "jdbc:sqlite:" + this.dbPath;
+        this.conn = DriverManager.getConnection(url);
+        System.out.println("[BD] Ligação estabelecida a " + this.dbPath);
+
+        // Ativar Foreign Keys (o SQLite traz isto desligado por defeito)
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA foreign_keys = ON;");
+        }
+    }
+
+    // 2. Criar as Tabelas (Se não existirem)
+    public void criarTabelas() throws SQLException {
+        // Tabela para guardar a Versão da BD (Essencial para a sincronização)
+        String sqlConfig = "CREATE TABLE IF NOT EXISTS Configuracao (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "chave TEXT UNIQUE NOT NULL, " +
+                "valor TEXT NOT NULL);";
+
+        String sqlDocente = "CREATE TABLE IF NOT EXISTS Docente (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "nome TEXT NOT NULL, " +
+                "email TEXT UNIQUE NOT NULL, " +
+                "password TEXT NOT NULL);"; // Nota: Guardar hash na realidade
+
+        String sqlEstudante = "CREATE TABLE IF NOT EXISTS Estudante (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "numero_estudante TEXT UNIQUE NOT NULL, " +
+                "nome TEXT NOT NULL, " +
+                "email TEXT UNIQUE NOT NULL, " +
+                "password TEXT NOT NULL);";
+
+        // Inserir a versão 0 se a tabela estiver vazia
+        String sqlInitVersao = "INSERT OR IGNORE INTO Configuracao (chave, valor) VALUES ('versao_bd', '0');";
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(sqlConfig);
+            stmt.execute(sqlDocente);
+            stmt.execute(sqlEstudante);
+            stmt.execute(sqlInitVersao);
+        }
+        System.out.println("[BD] Tabelas verificadas/criadas.");
+    }
+
+    // 3. Fechar a ligação
+    public void desconectar() {
+        try {
+            if (conn != null) conn.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
