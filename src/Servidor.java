@@ -1,9 +1,6 @@
 import java.io.*;
 import java.net.*;
 
-// Importa as "receitas" de comunicação
-import MsgRegistoServidor;
-import MsgRespostaDiretoria;
 
 public class Servidor {
 
