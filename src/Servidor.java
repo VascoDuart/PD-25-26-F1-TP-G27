@@ -57,7 +57,7 @@ public class Servidor {
 
                 // IMPORTANTE: Ativa a thread que deixa os backups copiarem a BD
                 aceitarPedidosBD();
-
+                aceitarClientes();
             } else {
                 System.out.println("[Servidor] >>> EU SOU BACKUP <<<");
                 obterBDdoPrincipal(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
@@ -133,10 +133,37 @@ public class Servidor {
         }).start();
     }
 
+    private void aceitarClientes() {
+        new Thread(() -> {
+            try {
+                while (true) {
+                    // Fica à espera que um Cliente se ligue
+                    Socket s = srvSocketClientes.accept();
+                    System.out.println("[Clientes] Novo cliente conectado: " + s.getInetAddress());
 
+                    // Cria uma thread para atender este cliente específico
+                    new Thread(() -> atenderCliente(s)).start();
+                }
+            } catch (IOException e) {
+                System.err.println("[Clientes] Erro no socket: " + e.getMessage());
+            }
+        }).start();
+    }
 
+    private void atenderCliente(Socket s) {
+        try (ObjectOutputStream out = new ObjectOutputStream(s.getOutputStream());
+             ObjectInputStream in = new ObjectInputStream(s.getInputStream())) {
 
+            // Simples "Olá" para confirmar a ligação
+            out.writeObject("Bem-vindo ao Sistema de Perguntas!");
+            out.flush();
 
+            // Aqui virá a lógica de Login/Perguntas mais tarde...
+
+        } catch (IOException e) {
+            // Cliente desligou-se, normal
+        }
+    }
 
     private void enviarBD(Socket s) {
         try (OutputStream os = s.getOutputStream()) {

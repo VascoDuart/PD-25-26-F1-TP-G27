@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 
+
 public class ServicoDeDiretoria {
 
     // Guarda quem é o chefe (em memória)
@@ -28,38 +29,47 @@ public class ServicoDeDiretoria {
                 try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()))) {
                     Object msg = ois.readObject();
 
+                    // --- CASO 1: É UM SERVIDOR A REGISTAR-SE ---
                     if (msg instanceof MsgRegistoServidor) {
                         MsgRegistoServidor registo = (MsgRegistoServidor) msg;
-                        System.out.println("[Diretoria] Pedido de registo de: " + packet.getAddress());
+                        System.out.println("[Diretoria] SERVIDOR registou-se: " + packet.getAddress());
 
-                        // Lógica Simples: O primeiro a chegar é o Principal
                         if (ipPrincipal == null) {
                             ipPrincipal = packet.getAddress();
                             portoClientePrincipal = registo.getPortoClienteTCP();
                             portoDbPrincipal = registo.getPortoBDT_TCP();
-                            System.out.println(" -> Novo Servidor Principal definido: " + ipPrincipal);
+                            System.out.println(" -> Novo Principal definido: " + ipPrincipal + ":" + portoClientePrincipal);
                         }
 
-                        // Responder com os dados do Principal atual
-                        MsgRespostaDiretoria resposta = new MsgRespostaDiretoria(
-                                ipPrincipal, portoClientePrincipal, portoDbPrincipal
-                        );
+                        enviarResposta(socket, packet.getAddress(), packet.getPort());
+                    }
 
-                        // Enviar resposta
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        ObjectOutputStream oos = new ObjectOutputStream(baos);
-                        oos.writeObject(resposta);
-                        byte[] dataResp = baos.toByteArray();
-
-                        DatagramPacket respPacket = new DatagramPacket(
-                                dataResp, dataResp.length, packet.getAddress(), packet.getPort()
-                        );
-                        socket.send(respPacket);
+                    // --- CASO 2: É UM CLIENTE A PEDIR O SERVIDOR (ESTE FALTAVA!) ---
+                    else if (msg instanceof MsgPedidoServidor) {
+                        System.out.println("[Diretoria] CLIENTE pediu servidor: " + packet.getAddress());
+                        enviarResposta(socket, packet.getAddress(), packet.getPort());
                     }
                 }
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    // Método auxiliar para responder (evita repetir código)
+    private static void enviarResposta(DatagramSocket socket, InetAddress ipDestino, int portoDestino) throws IOException {
+        MsgRespostaDiretoria resposta = new MsgRespostaDiretoria(
+                ipPrincipal, portoClientePrincipal, portoDbPrincipal
+        );
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(resposta);
+        byte[] dataResp = baos.toByteArray();
+
+        DatagramPacket respPacket = new DatagramPacket(
+                dataResp, dataResp.length, ipDestino, portoDestino
+        );
+        socket.send(respPacket);
     }
 }
