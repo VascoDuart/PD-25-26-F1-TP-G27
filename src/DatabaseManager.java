@@ -84,6 +84,27 @@ public class DatabaseManager {
         }
     }
 
+    public synchronized boolean autenticarDocente(String email, String password) {
+        String sql = "SELECT password FROM Docente WHERE email = ?";
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                String passNaBD = rs.getString("password");
+                // Numa fase avançada, aqui comparas Hashes, não texto limpo!
+                return passNaBD.equals(password);
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro na autenticação: " + e.getMessage());
+        }
+        return false; // Não encontrou ou password errada
+    }
+
+
+
+
     // 3. Fechar a ligação
     public void desconectar() {
         try {
