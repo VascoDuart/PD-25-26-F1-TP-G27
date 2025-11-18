@@ -35,25 +35,27 @@ public class Servidor {
             System.out.println("[Servidor] Escuta Clientes TCP: " + portoClienteTCP);
             System.out.println("[Servidor] Escuta DB TCP: " + portoBDT_TCP);
 
-            // --- Lógica Principal ---
+            // --- 1. Registar no Diretoria ---
             System.out.println("[Servidor] A contactar Diretoria " + ipDiretorio + ":" + portoDiretorio);
             MsgRespostaDiretoria resposta = registarNoDiretorio();
 
             if (resposta == null || !resposta.existeServidor()) {
-                System.err.println("[Servidor] Falha no registo. A sair.");
+                System.err.println("[Servidor] Falha no registo ou resposta inválida. A sair.");
                 return;
             }
 
-            System.out.println("[Servidor] Principal é: " + resposta.getIpServidorPrincipal());
+            System.out.println("[Servidor] O Diretoria diz que o Principal é: " +
+                    resposta.getIpServidorPrincipal() + ":" + resposta.getPortoClienteTCP());
 
-            // Sou eu o Principal?
-            if (resposta.getIpServidorPrincipal().equals(InetAddress.getLocalHost()) &&
-                    resposta.getPortoClienteTCP() == this.portoClienteTCP) {
+            // --- 2. Verificar Identidade (CORREÇÃO AQUI) ---
+            // Comparamos o porto TCP de clientes. Se for igual ao meu, sou eu o Principal.
+            boolean souEu = (resposta.getPortoClienteTCP() == this.portoClienteTCP);
 
+            if (souEu) {
                 System.out.println("[Servidor] >>> EU SOU O PRINCIPAL <<<");
                 verificarBDLocal();
 
-                // --- LINHA ADICIONADA: Ativa a escuta de pedidos de BD ---
+                // IMPORTANTE: Ativa a thread que deixa os backups copiarem a BD
                 aceitarPedidosBD();
 
             } else {
@@ -61,7 +63,7 @@ public class Servidor {
                 obterBDdoPrincipal(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
             }
 
-            // Mantém o servidor vivo (simulação do loop principal)
+            // --- 3. Loop Principal ---
             System.out.println("[Servidor] Em funcionamento...");
             while(true) { Thread.sleep(10000); }
 
@@ -96,7 +98,7 @@ public class Servidor {
 
     // Simulação: Não tenta ler ficheiros reais para não dar erro
     private void verificarBDLocal() {
-        System.out.println("[Principal] (Simulação) BD verificada.");
+        System.out.println("[Principal] (Simulação) BD verificada em " + this.dbPath);
     }
 
     // Simulação: Conecta-se mas não guarda ficheiro
@@ -120,20 +122,34 @@ public class Servidor {
         new Thread(() -> {
             try {
                 while (true) {
+                    // Fica bloqueado aqui à espera de conexões
                     Socket s = srvSocketDB.accept();
                     System.out.println("[AceitarBD] Backup conectou-se. A enviar dados...");
                     new Thread(() -> enviarBD(s)).start();
                 }
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                System.err.println("[AceitarBD] Erro no socket: " + e.getMessage());
+            }
         }).start();
     }
+
+
+
+
+
 
     private void enviarBD(Socket s) {
         try (OutputStream os = s.getOutputStream()) {
             // Envia dados falsos só para testar
+            System.out.println("[AceitarBD] A enviar bytes...");
             os.write("DADOS_DA_BD_FALSA".getBytes());
             os.flush();
-        } catch (IOException e) {}
+            System.out.println("[AceitarBD] Envio concluído.");
+        } catch (IOException e) {
+            System.err.println("[AceitarBD] Erro a enviar: " + e.getMessage());
+        } finally {
+            try { s.close(); } catch (IOException e) {}
+        }
     }
 
     public static void main(String[] args) {
