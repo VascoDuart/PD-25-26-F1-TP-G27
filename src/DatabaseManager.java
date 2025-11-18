@@ -63,6 +63,27 @@ public class DatabaseManager {
         System.out.println("[BD] Tabelas verificadas/criadas.");
     }
 
+
+    public synchronized boolean registarDocente(Docente d) {
+        String sql = "INSERT INTO Docente(nome, email, password) VALUES(?,?,?)";
+
+        // O 'try-with-resources' fecha o PreparedStatement automaticamente
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, d.getNome());
+            pstmt.setString(2, d.getEmail());
+            pstmt.setString(3, d.getPassword()); // Nota: Num caso real, usaríamos Hash aqui!
+
+            pstmt.executeUpdate();
+            System.out.println("[BD] Docente inserido: " + d.getEmail());
+            return true;
+
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao inserir docente (email repetido?): " + e.getMessage());
+            return false;
+        }
+    }
+
     // 3. Fechar a ligação
     public void desconectar() {
         try {

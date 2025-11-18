@@ -13,21 +13,17 @@ public class Cliente {
         int portoDir = Integer.parseInt(args[1]);
 
         try {
-            // 1. Obter endereço do Servidor Principal (UDP)
-            System.out.println("[Cliente] A perguntar ao Diretoria onde está o servidor...");
+            // 1. Perguntar ao Diretoria onde está o Servidor (UDP)
+            System.out.println("[Cliente] A procurar servidor...");
             DatagramSocket udpSocket = new DatagramSocket();
-
-            // Prepara a mensagem
             MsgPedidoServidor pedido = new MsgPedidoServidor();
+
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             new ObjectOutputStream(baos).writeObject(pedido);
             byte[] data = baos.toByteArray();
 
-            // Envia
-            InetAddress ipDiretoria = InetAddress.getByName(ipDir);
-            udpSocket.send(new DatagramPacket(data, data.length, ipDiretoria, portoDir));
+            udpSocket.send(new DatagramPacket(data, data.length, InetAddress.getByName(ipDir), portoDir));
 
-            // Recebe resposta
             byte[] buffer = new byte[4096];
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             udpSocket.receive(packet);
@@ -37,22 +33,31 @@ public class Cliente {
             udpSocket.close();
 
             if (!resposta.existeServidor()) {
-                System.out.println("[Cliente] O Diretoria diz que não há servidores ativos.");
+                System.out.println("[Cliente] Nenhum servidor disponível.");
                 return;
             }
 
-            System.out.println("[Cliente] O Servidor é: " + resposta.getIpServidorPrincipal() + ":" + resposta.getPortoClienteTCP());
+            System.out.println("[Cliente] Servidor encontrado em " + resposta.getPortoClienteTCP());
 
-            // 2. Ligar ao Servidor (TCP)
+            // 2. Ligar ao Servidor TCP e Tentar Registar
             try (Socket socket = new Socket(resposta.getIpServidorPrincipal(), resposta.getPortoClienteTCP());
-                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
+                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
 
-                System.out.println("[Cliente] Conectado com sucesso!");
+                System.out.println("[Cliente] Conectado! A tentar registar docente...");
 
-                // 3. Ler a mensagem de boas-vindas
-                String mensagem = (String) in.readObject();
-                System.out.println("[Servidor Disse]: " + mensagem);
+                // --- CRIAR DADOS DE TESTE ---
+                // Podes mudar estes valores para testar erros (ex: tentar registar o mesmo email 2 vezes)
+                Docente novoDocente = new Docente("Jose Marinho", "jose@isec.pt", "12345");
+                MsgRegisto msg = new MsgRegisto(novoDocente);
+
+                // Enviar pedido
+                out.writeObject(msg);
+                out.flush();
+
+                // Ler resposta
+                String servResposta = (String) in.readObject();
+                System.out.println("[Servidor Diz]: " + servResposta);
 
             }
 

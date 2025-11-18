@@ -14,6 +14,9 @@ public class Servidor {
     private int portoClienteTCP;
     private int portoBDT_TCP;
 
+    // Variável para gerir a BD em todo o servidor
+    private DatabaseManager db;
+
     public Servidor(String ipDir, int pDir, String dbPath, String ipMulti) {
         this.ipDiretorio = ipDir;
         this.portoDiretorio = pDir;
@@ -33,37 +36,33 @@ public class Servidor {
             this.portoBDT_TCP = srvDB.getLocalPort();
 
             System.out.println("[Servidor] Escuta Clientes TCP: " + portoClienteTCP);
-            System.out.println("[Servidor] Escuta DB TCP: " + portoBDT_TCP);
 
-            // --- 1. Registar no Diretoria ---
-            System.out.println("[Servidor] A contactar Diretoria " + ipDiretorio + ":" + portoDiretorio);
+            // 1. Registar no Diretoria
             MsgRespostaDiretoria resposta = registarNoDiretorio();
 
             if (resposta == null || !resposta.existeServidor()) {
-                System.err.println("[Servidor] Falha no registo ou resposta inválida. A sair.");
+                System.err.println("[Servidor] Falha no registo. A sair.");
                 return;
             }
 
-            System.out.println("[Servidor] O Diretoria diz que o Principal é: " +
-                    resposta.getIpServidorPrincipal() + ":" + resposta.getPortoClienteTCP());
-
-            // --- 2. Verificar Identidade (CORREÇÃO AQUI) ---
-            // Comparamos o porto TCP de clientes. Se for igual ao meu, sou eu o Principal.
+            // 2. Verificar Identidade
             boolean souEu = (resposta.getPortoClienteTCP() == this.portoClienteTCP);
 
             if (souEu) {
                 System.out.println("[Servidor] >>> EU SOU O PRINCIPAL <<<");
-                verificarBDLocal();
 
-                // IMPORTANTE: Ativa a thread que deixa os backups copiarem a BD
+                // Prepara a BD e mantém a ligação aberta
+                prepararBaseDeDados();
+
                 aceitarPedidosBD();
-                aceitarClientes();
+                aceitarClientes(); // Começa a aceitar registos!
+
             } else {
                 System.out.println("[Servidor] >>> EU SOU BACKUP <<<");
                 obterBDdoPrincipal(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
             }
 
-            // --- 3. Loop Principal ---
+            // Loop para manter o servidor vivo
             System.out.println("[Servidor] Em funcionamento...");
             while(true) { Thread.sleep(10000); }
 
@@ -72,90 +71,25 @@ public class Servidor {
         }
     }
 
-    private MsgRespostaDiretoria registarNoDiretorio() {
-        try (DatagramSocket socket = new DatagramSocket()) {
-            socket.setSoTimeout(5000);
-
-            MsgRegistoServidor msg = new MsgRegistoServidor(portoClienteTCP, portoBDT_TCP);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            new ObjectOutputStream(baos).writeObject(msg);
-            byte[] data = baos.toByteArray();
-
-            InetAddress ip = InetAddress.getByName(this.ipDiretorio);
-            socket.send(new DatagramPacket(data, data.length, ip, this.portoDiretorio));
-
-            byte[] buffer = new byte[4096];
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-            socket.receive(packet);
-
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
-            return (MsgRespostaDiretoria) ois.readObject();
-        } catch (Exception e) {
-            System.out.println("[Servidor] Erro no registo: " + e.getMessage());
-            return null;
-        }
-    }
-
-    // Substitui o teu método antigo por este:
-    private void verificarBDLocal() {
-        System.out.println("[Principal] A verificar Base de Dados...");
-
-        DatabaseManager db = new DatabaseManager(this.dbPath);
-
+    private void prepararBaseDeDados() {
+        System.out.println("[Principal] A ligar à Base de Dados...");
+        this.db = new DatabaseManager(this.dbPath);
         try {
-            db.conectar();      // Cria o ficheiro .db se não existir
-            db.criarTabelas();  // Cria as tabelas lá dentro
-            db.desconectar();   // Fecha a ligação (o servidor abre quando precisar)
-
-            System.out.println("[Principal] BD pronta e inicializada com sucesso.");
-
+            db.conectar();
+            db.criarTabelas();
+            // Nota: NÃO desconectamos aqui, para podermos usar a 'db' nos clientes
+            System.out.println("[Principal] BD pronta.");
         } catch (Exception e) {
-            System.err.println("[Principal] ERRO CRÍTICO NA BD: " + e.getMessage());
-            // Se a BD falha, o servidor não pode funcionar
+            System.err.println("[Principal] Erro fatal na BD: " + e.getMessage());
             System.exit(1);
         }
-    }
-
-    // Simulação: Conecta-se mas não guarda ficheiro
-    private boolean obterBDdoPrincipal(InetAddress ipPrincipal, int portoDB) {
-        System.out.println("[Backup] A pedir BD a " + ipPrincipal + ":" + portoDB);
-        try (Socket s = new Socket(ipPrincipal, portoDB);
-             InputStream is = s.getInputStream()) {
-
-            // Lê o que o principal mandar só para testar a rede
-            byte[] b = new byte[1024];
-            int lidos = is.read(b);
-            System.out.println("[Backup] Recebi " + lidos + " bytes de 'BD'. Sucesso!");
-            return true;
-        } catch (IOException e) {
-            System.out.println("[Backup] Erro a obter BD: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private void aceitarPedidosBD() {
-        new Thread(() -> {
-            try {
-                while (true) {
-                    // Fica bloqueado aqui à espera de conexões
-                    Socket s = srvSocketDB.accept();
-                    System.out.println("[AceitarBD] Backup conectou-se. A enviar dados...");
-                    new Thread(() -> enviarBD(s)).start();
-                }
-            } catch (IOException e) {
-                System.err.println("[AceitarBD] Erro no socket: " + e.getMessage());
-            }
-        }).start();
     }
 
     private void aceitarClientes() {
         new Thread(() -> {
             try {
                 while (true) {
-                    // Fica à espera que um Cliente se ligue
                     Socket s = srvSocketClientes.accept();
-                    System.out.println("[Clientes] Novo cliente conectado: " + s.getInetAddress());
-
                     // Cria uma thread para atender este cliente específico
                     new Thread(() -> atenderCliente(s)).start();
                 }
@@ -169,29 +103,83 @@ public class Servidor {
         try (ObjectOutputStream out = new ObjectOutputStream(s.getOutputStream());
              ObjectInputStream in = new ObjectInputStream(s.getInputStream())) {
 
-            // Simples "Olá" para confirmar a ligação
-            out.writeObject("Bem-vindo ao Sistema de Perguntas!");
-            out.flush();
+            // 1. Ler mensagem do cliente
+            Object msg = in.readObject();
 
-            // Aqui virá a lógica de Login/Perguntas mais tarde...
+            if (msg instanceof MsgRegisto) {
+                MsgRegisto pedido = (MsgRegisto) msg;
+                Docente d = pedido.getDocente();
+                System.out.println("[Cliente] Recebido pedido de registo para: " + d.getEmail());
 
-        } catch (IOException e) {
-            // Cliente desligou-se, normal
+                // 2. Tentar gravar na BD
+                boolean sucesso = db.registarDocente(d);
+
+                // 3. Responder ao cliente
+                if (sucesso) {
+                    out.writeObject("SUCESSO: Docente registado!");
+                } else {
+                    out.writeObject("ERRO: Email já existe ou dados inválidos.");
+                }
+                out.flush();
+            }
+
+        } catch (Exception e) {
+            System.err.println("[Cliente] Erro na ligação com cliente: " + e.getMessage());
         }
+    }
+
+    private MsgRespostaDiretoria registarNoDiretorio() {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(5000);
+            MsgRegistoServidor msg = new MsgRegistoServidor(portoClienteTCP, portoBDT_TCP);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            new ObjectOutputStream(baos).writeObject(msg);
+            byte[] data = baos.toByteArray();
+            InetAddress ip = InetAddress.getByName(this.ipDiretorio);
+            socket.send(new DatagramPacket(data, data.length, ip, this.portoDiretorio));
+            byte[] buffer = new byte[4096];
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            socket.receive(packet);
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+            return (MsgRespostaDiretoria) ois.readObject();
+        } catch (Exception e) { return null; }
+    }
+
+    // Backup pede BD ao Principal
+    private boolean obterBDdoPrincipal(InetAddress ipPrincipal, int portoDB) {
+        System.out.println("[Backup] A pedir BD a " + ipPrincipal + ":" + portoDB);
+        try (Socket s = new Socket(ipPrincipal, portoDB);
+             InputStream is = s.getInputStream()) {
+            byte[] b = new byte[1024];
+            int lidos = is.read(b);
+            System.out.println("[Backup] Recebi " + lidos + " bytes de 'BD'. Sucesso!");
+            return true;
+        } catch (IOException e) {
+            System.out.println("[Backup] Erro a obter BD: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // Principal envia BD ao Backup
+    private void aceitarPedidosBD() {
+        new Thread(() -> {
+            try {
+                while (true) {
+                    Socket s = srvSocketDB.accept();
+                    System.out.println("[AceitarBD] Backup conectou-se. A enviar dados...");
+                    new Thread(() -> enviarBD(s)).start();
+                }
+            } catch (IOException e) {}
+        }).start();
     }
 
     private void enviarBD(Socket s) {
         try (OutputStream os = s.getOutputStream()) {
-            // Envia dados falsos só para testar
-            System.out.println("[AceitarBD] A enviar bytes...");
+            // Envia dados falsos só para testar por enquanto
             os.write("DADOS_DA_BD_FALSA".getBytes());
             os.flush();
-            System.out.println("[AceitarBD] Envio concluído.");
-        } catch (IOException e) {
-            System.err.println("[AceitarBD] Erro a enviar: " + e.getMessage());
-        } finally {
-            try { s.close(); } catch (IOException e) {}
-        }
+        } catch (IOException e) {}
+        finally { try { s.close(); } catch (Exception e) {} }
     }
 
     public static void main(String[] args) {
