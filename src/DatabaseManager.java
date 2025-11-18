@@ -11,12 +11,20 @@ public class DatabaseManager {
     }
 
     // 1. Ligar à Base de Dados
+    // 1. Ligar à Base de Dados (CORRIGIDO)
     public void conectar() throws SQLException {
+        try {
+            // FORÇAR O DRIVER A CARREGAR (O "truque" para resolver o teu erro)
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("O Driver SQLite não foi encontrado na biblioteca!");
+        }
+
         String url = "jdbc:sqlite:" + this.dbPath;
-        this.conn = DriverManager.getConnection(url);
+        this.conn = DriverManager.getConnection(url); // Agora isto já vai funcionar
         System.out.println("[BD] Ligação estabelecida a " + this.dbPath);
 
-        // Ativar Foreign Keys (o SQLite traz isto desligado por defeito)
+        // Ativar Foreign Keys
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON;");
         }
