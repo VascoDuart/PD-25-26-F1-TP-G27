@@ -1,7 +1,21 @@
 import java.io.*;
 import java.net.*;
+import java.util.Scanner;
 
 public class Cliente {
+
+    // Constantes de Estado do Cliente
+    private static final int ESTADO_INICIAL = 0;
+    private static final int ESTADO_DOCENTE = 1;
+    private static final int ESTADO_ESTUDANTE = 2;
+
+    // Variáveis de Estado
+    private static int estadoLogin = ESTADO_INICIAL;
+    private static Scanner scanner = new Scanner(System.in);
+
+    // Dados do Servidor Principal atual
+    private static InetAddress ipPrincipal;
+    private static int portoClienteTCP;
 
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -12,57 +26,234 @@ public class Cliente {
         String ipDir = args[0];
         int portoDir = Integer.parseInt(args[1]);
 
-        try {
-            // 1. Perguntar ao Diretoria onde está o Servidor (UDP)
-            System.out.println("[Cliente] A procurar servidor...");
-            DatagramSocket udpSocket = new DatagramSocket();
-            MsgPedidoServidor pedido = new MsgPedidoServidor();
+        // Endereço do Servidor anterior (para recuperação de falhas)
+        InetAddress ultimoIP = null;
+        int ultimoPorto = -1;
 
+        // Loop principal: Tenta encontrar o servidor e manter a sessão
+        while (true) {
+            // 1. Tentar encontrar o Servidor (UDP)
+            if (!encontrarServidor(ipDir, portoDir, ultimoIP, ultimoPorto)) {
+                System.out.println("A tentar novamente em 5 segundos...");
+                try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+                continue;
+            }
+
+            // Atualiza os dados do último servidor para recuperação de falhas
+            ultimoIP = ipPrincipal;
+            ultimoPorto = portoClienteTCP;
+
+            // 2. Interagir com o Servidor Principal (TCP)
+            iniciarSessao();
+
+            // Se a sessão acabar (logout/erro), o loop recomeça.
+            estadoLogin = ESTADO_INICIAL;
+        }
+    }
+
+    private static boolean encontrarServidor(String ipDir, int portoDir, InetAddress ultimoIP, int ultimoPorto) {
+        System.out.println("\n[Cliente] A procurar servidor principal...");
+
+        try (DatagramSocket udpSocket = new DatagramSocket()) {
+            udpSocket.setSoTimeout(5000);
+
+            // ... (Código para enviar MsgPedidoServidor e receber MsgRespostaDiretoria) ...
+            MsgPedidoServidor pedido = new MsgPedidoServidor();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             new ObjectOutputStream(baos).writeObject(pedido);
             byte[] data = baos.toByteArray();
 
-            udpSocket.send(new DatagramPacket(data, data.length, InetAddress.getByName(ipDir), portoDir));
+            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(ipDir), portoDir);
+            udpSocket.send(packet);
 
             byte[] buffer = new byte[4096];
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-            udpSocket.receive(packet);
+            DatagramPacket respPacket = new DatagramPacket(buffer, buffer.length);
+            udpSocket.receive(respPacket);
 
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(respPacket.getData()));
             MsgRespostaDiretoria resposta = (MsgRespostaDiretoria) ois.readObject();
-            udpSocket.close();
 
             if (!resposta.existeServidor()) {
-                System.out.println("[Cliente] Nenhum servidor disponível.");
-                return;
+                System.out.println("[Cliente] Nenhum servidor disponível na Diretoria.");
+                return false;
             }
 
-            System.out.println("[Cliente] Servidor encontrado em " + resposta.getPortoClienteTCP());
+            ipPrincipal = resposta.getIpServidorPrincipal();
+            portoClienteTCP = resposta.getPortoClienteTCP();
+            System.out.println("[Cliente] Servidor encontrado em: " + ipPrincipal.getHostAddress() + ":" + portoClienteTCP);
 
-            // 2. Ligar ao Servidor TCP e Tentar Registar
-            try (Socket socket = new Socket(resposta.getIpServidorPrincipal(), resposta.getPortoClienteTCP());
-                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+            if (ultimoIP != null && ultimoPorto != -1 &&
+                    ipPrincipal.equals(ultimoIP) && portoClienteTCP == ultimoPorto) {
 
-                System.out.println("[Cliente] Conectado! A tentar registar docente...");
+                System.out.println("[Cliente] O Servidor principal é o mesmo que falhou. A tentar novamente em 20 segundos...");
+                try { Thread.sleep(20000); } catch (InterruptedException ignored) {}
 
-                // --- CRIAR DADOS DE TESTE ---
-                // Podes mudar estes valores para testar erros (ex: tentar registar o mesmo email 2 vezes)
-                Docente novoDocente = new Docente("Jose Marinho", "jose@isec.pt", "12345");
-                MsgRegisto msg = new MsgRegisto(novoDocente);
-
-                // Enviar pedido
-                out.writeObject(msg);
-                out.flush();
-
-                // Ler resposta
-                String servResposta = (String) in.readObject();
-                System.out.println("[Servidor Diz]: " + servResposta);
-
+                return encontrarServidor(ipDir, portoDir, null, -1);
             }
 
+            return true;
+
+        } catch (SocketTimeoutException e) {
+            System.err.println("[Cliente] Timeout: O Serviço de Diretoria não respondeu.");
+            return false;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Cliente] Erro ao comunicar com a Diretoria: " + e.getMessage());
+            return false;
         }
+    }
+
+    private static void iniciarSessao() {
+        try (Socket socket = new Socket(ipPrincipal, portoClienteTCP);
+             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+
+            System.out.println("[Cliente] Ligação TCP estabelecida com o Servidor Principal.");
+
+            // 1. Fase de Autenticação/Registo
+            while (socket.isConnected() && estadoLogin == ESTADO_INICIAL) {
+                mostrarMenuInicial(out, in);
+            }
+
+            // 2. Fase de Interação (após o login)
+            if (estadoLogin == ESTADO_DOCENTE) {
+                menuDocente(out, in);
+            } else if (estadoLogin == ESTADO_ESTUDANTE) {
+                menuEstudante(out, in);
+            }
+
+        } catch (ConnectException e) {
+            System.err.println("[Cliente] Falha de conexão TCP. O servidor pode ter caído. A solicitar novo servidor...");
+        } catch (SocketException | EOFException e) {
+            System.err.println("[Cliente] Conexão TCP perdida. O servidor encerrou a ligação. A solicitar novo servidor...");
+        } catch (Exception e) {
+            System.err.println("[Cliente] Erro inesperado na sessão: " + e.getMessage());
+        }
+        System.out.println("[Cliente] Sessão encerrada.");
+    }
+
+    private static void mostrarMenuInicial(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        System.out.println("\n--- Menu Principal ---");
+        System.out.println("1. Autenticar (Docente/Estudante)");
+        System.out.println("2. Registar Novo Docente");
+        System.out.println("3. Registar Novo Estudante");
+        System.out.println("0. Sair");
+        System.out.print("Opção: ");
+
+        if (!scanner.hasNextInt()) {
+            scanner.next();
+            return;
+        }
+        int opcao = scanner.nextInt();
+        scanner.nextLine();
+
+        switch (opcao) {
+            case 1:
+                processarLogin(out, in);
+                break;
+            case 2:
+                processarRegistoDocente(out, in);
+                break;
+            case 3:
+                processarRegistoEstudante(out, in);
+                break;
+            case 0:
+                System.exit(0);
+                break;
+            default:
+                System.out.println("Opção inválida.");
+        }
+    }
+
+    private static void processarRegistoDocente(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        System.out.println("\n--- Registo de Docente ---");
+        System.out.print("Nome: ");
+        String nome = scanner.nextLine();
+        System.out.print("Email: ");
+        String email = scanner.nextLine();
+        System.out.print("Password: ");
+        String password = scanner.nextLine();
+        System.out.print("Código Único de Docente: ");
+        String codUnico = scanner.nextLine();
+
+        Docente novoDocente = new Docente(nome, email, password);
+
+        // Utiliza o construtor correto: Docente + Código Único
+        MsgRegisto msg = new MsgRegisto(novoDocente, codUnico);
+        out.writeObject(msg);
+        out.flush();
+
+        String resposta = (String) in.readObject();
+        System.out.println("[Servidor Diz]: " + resposta);
+    }
+
+    private static void processarRegistoEstudante(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        System.out.println("\n--- Registo de Estudante ---");
+        System.out.print("Nome: ");
+        String nome = scanner.nextLine();
+        System.out.print("Email: ");
+        String email = scanner.nextLine();
+        System.out.print("Password: ");
+        String password = scanner.nextLine();
+        System.out.print("Número de Estudante: ");
+        String numEstudante = scanner.nextLine();
+
+        Estudante novoEstudante = new Estudante(numEstudante, nome, email, password);
+
+        // Utiliza o construtor correto: Estudante
+        MsgRegisto msg = new MsgRegisto(novoEstudante);
+        out.writeObject(msg);
+        out.flush();
+
+        String resposta = (String) in.readObject();
+        System.out.println("[Servidor Diz]: " + resposta);
+    }
+
+    private static void processarLogin(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        System.out.println("\n--- Autenticação ---");
+        System.out.print("Email: ");
+        String email = scanner.nextLine();
+        System.out.print("Password: ");
+        String password = scanner.nextLine();
+
+        MsgLogin msg = new MsgLogin(email, password);
+        out.writeObject(msg);
+        out.flush();
+
+        Object resposta = in.readObject();
+
+        if (resposta instanceof String) {
+            String respStr = (String) resposta;
+            System.out.println("[Servidor Diz]: " + respStr);
+
+            if (respStr.contains("sucesso Docente")) {
+                estadoLogin = ESTADO_DOCENTE;
+                System.out.println("-> Autenticação de Docente concluída com sucesso.");
+            } else if (respStr.contains("sucesso Estudante")) {
+                estadoLogin = ESTADO_ESTUDANTE;
+                System.out.println("-> Autenticação de Estudante concluída com sucesso.");
+            } else {
+                System.out.println("-> Falha na autenticação.");
+            }
+        }
+    }
+
+    private static void menuDocente(ObjectOutputStream out, ObjectInputStream in) {
+        System.out.println("\n--- Menu Docente (Logado) ---");
+        System.out.println("Funcionalidades pendentes.");
+        System.out.println("0. Logout");
+
+        scanner.nextLine();
+        estadoLogin = ESTADO_INICIAL;
+        System.out.println("[Docente] Sessão encerrada (Logout).");
+    }
+
+    private static void menuEstudante(ObjectOutputStream out, ObjectInputStream in) {
+        System.out.println("\n--- Menu Estudante (Logado) ---");
+        System.out.println("Funcionalidades pendentes.");
+        System.out.println("0. Logout");
+
+        scanner.nextLine();
+        estadoLogin = ESTADO_INICIAL;
+        System.out.println("[Estudante] Sessão encerrada (Logout).");
     }
 }

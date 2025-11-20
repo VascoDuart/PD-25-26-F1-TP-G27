@@ -1,9 +1,13 @@
 <component name="libraryTable">
   <library name="sqlite-jdbc-3.46.0.0">
     <CLASSES>
-      <root url="jar://$PROJECT_DIR$/../sqlite-jdbc-3.46.0.0.jar!/" />
+      <root url="file://$PROJECT_DIR$/../../../../../Program Files/Java/sqlite-jdbc" />
     </CLASSES>
     <JAVADOC />
-    <SOURCES />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/../../../../../Program Files/Java/sqlite-jdbc" />
+    </SOURCES>
+    <jarDirectory url="file://$PROJECT_DIR$/../../../../../Program Files/Java/sqlite-jdbc" recursive="false" />
+    <jarDirectory url="file://$PROJECT_DIR$/../../../../../Program Files/Java/sqlite-jdbc" recursive="false" type="SOURCES" />
   </library>
 </component>

@@ -108,20 +108,38 @@ public class Servidor {
 
             if (msg instanceof MsgRegisto) {
                 MsgRegisto pedido = (MsgRegisto) msg;
-                Docente d = pedido.getDocente();
-                System.out.println("[Cliente] Recebido pedido de registo para: " + d.getEmail());
+                boolean sucesso = false;
 
-                // 2. Tentar gravar na BD
-                boolean sucesso = db.registarDocente(d);
+                // --- VERIFICAÇÃO CRÍTICA AQUI ---
+                if (pedido.isDocente()) {
+                    Docente d = pedido.getDocente();
+                    System.out.println("[Cliente] Recebido pedido de registo DOCENTE para: " + d.getEmail());
+                    // TODO: Adicionar validação do código único do docente
+                    sucesso = db.registarDocente(d);
 
-                // 3. Responder ao cliente
-                if (sucesso) {
-                    out.writeObject("SUCESSO: Docente registado!");
+                } else if (pedido.isEstudante()) {
+                    Estudante e = pedido.getEstudante();
+                    System.out.println("[Cliente] Recebido pedido de registo ESTUDANTE para: " + e.getEmail());
+                    // TODO: Criar a função db.registarEstudante(e)
+                    // sucesso = db.registarEstudante(e);
+
                 } else {
-                    out.writeObject("ERRO: Email já existe ou dados inválidos.");
+                    // Caso a mensagem não tenha nem Docente nem Estudante
+                    out.writeObject("ERRO: Mensagem de registo inválida.");
+                    out.flush();
+                    return;
+                }
+
+                // 2. Responder ao cliente
+                if (sucesso) {
+                    out.writeObject("SUCESSO: Utilizador registado!");
+                } else {
+                    out.writeObject("ERRO: Email/Número já existe ou dados inválidos.");
                 }
                 out.flush();
             }
+            // TODO: Adicionar processamento para MsgLogin
+            // ...
 
         } catch (Exception e) {
             System.err.println("[Cliente] Erro na ligação com cliente: " + e.getMessage());
