@@ -121,7 +121,7 @@ public class Servidor {
                     Estudante e = pedido.getEstudante();
                     System.out.println("[Cliente] Recebido pedido de registo ESTUDANTE para: " + e.getEmail());
                     // TODO: Criar a função db.registarEstudante(e)
-                    // sucesso = db.registarEstudante(e);
+                    sucesso = db.registarEstudante(e);
 
                 } else {
                     // Caso a mensagem não tenha nem Docente nem Estudante
