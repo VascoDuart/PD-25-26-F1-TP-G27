@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="slf4j-simple">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Program Files/Java/slf4j-simple" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/../../../../../Program Files/Java/slf4j-simple" />
+    </SOURCES>
+    <jarDirectory url="file://$PROJECT_DIR$/../../../../../Program Files/Java/slf4j-simple" recursive="false" />
+    <jarDirectory url="file://$PROJECT_DIR$/../../../../../Program Files/Java/slf4j-simple" recursive="false" type="SOURCES" />
+  </library>
+</component>
