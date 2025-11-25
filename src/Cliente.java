@@ -1,21 +1,24 @@
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class Cliente {
 
-    // Constantes de Estado do Cliente
     private static final int ESTADO_INICIAL = 0;
     private static final int ESTADO_DOCENTE = 1;
     private static final int ESTADO_ESTUDANTE = 2;
 
-    // Variáveis de Estado
     private static int estadoLogin = ESTADO_INICIAL;
     private static Scanner scanner = new Scanner(System.in);
 
-    // Dados do Servidor Principal atual
     private static InetAddress ipPrincipal;
     private static int portoClienteTCP;
+
+    // Variáveis para streams (úteis para passar entre métodos)
+    private static ObjectOutputStream out;
+    private static ObjectInputStream in;
 
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -26,28 +29,31 @@ public class Cliente {
         String ipDir = args[0];
         int portoDir = Integer.parseInt(args[1]);
 
-        // Endereço do Servidor anterior (para recuperação de falhas)
         InetAddress ultimoIP = null;
         int ultimoPorto = -1;
 
-        // Loop principal: Tenta encontrar o servidor e manter a sessão
         while (true) {
-            // 1. Tentar encontrar o Servidor (UDP)
+            // 1. Encontrar o Servidor
             if (!encontrarServidor(ipDir, portoDir, ultimoIP, ultimoPorto)) {
                 System.out.println("A tentar novamente em 5 segundos...");
                 try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
                 continue;
             }
 
-            // Atualiza os dados do último servidor para recuperação de falhas
+            // Atualiza o "último servidor conhecido"
             ultimoIP = ipPrincipal;
             ultimoPorto = portoClienteTCP;
 
-            // 2. Interagir com o Servidor Principal (TCP)
-            iniciarSessao();
+            // 2. Iniciar Sessão (Retorna TRUE se foi Logout voluntário, FALSE se foi erro)
+            boolean logoutLimpo = iniciarSessao();
 
-            // Se a sessão acabar (logout/erro), o loop recomeça.
-            estadoLogin = ESTADO_INICIAL;
+            if (logoutLimpo) {
+                // SE FOI LOGOUT, NÃO ESPERAMOS 20 SEGUNDOS!
+                // Esquecemos o último servidor para conectar imediatamente ao próximo (ou mesmo)
+                ultimoIP = null;
+                ultimoPorto = -1;
+                estadoLogin = ESTADO_INICIAL;
+            }
         }
     }
 
@@ -57,24 +63,21 @@ public class Cliente {
         try (DatagramSocket udpSocket = new DatagramSocket()) {
             udpSocket.setSoTimeout(5000);
 
-            // ... (Código para enviar MsgPedidoServidor e receber MsgRespostaDiretoria) ...
-            MsgPedidoServidor pedido = new MsgPedidoServidor();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            new ObjectOutputStream(baos).writeObject(pedido);
+            new ObjectOutputStream(baos).writeObject(new MsgPedidoServidor());
             byte[] data = baos.toByteArray();
 
-            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(ipDir), portoDir);
-            udpSocket.send(packet);
+            udpSocket.send(new DatagramPacket(data, data.length, InetAddress.getByName(ipDir), portoDir));
 
             byte[] buffer = new byte[4096];
-            DatagramPacket respPacket = new DatagramPacket(buffer, buffer.length);
-            udpSocket.receive(respPacket);
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            udpSocket.receive(packet);
 
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(respPacket.getData()));
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
             MsgRespostaDiretoria resposta = (MsgRespostaDiretoria) ois.readObject();
 
             if (!resposta.existeServidor()) {
-                System.out.println("[Cliente] Nenhum servidor disponível na Diretoria.");
+                System.out.println("[Cliente] Nenhum servidor disponível.");
                 return false;
             }
 
@@ -82,243 +85,174 @@ public class Cliente {
             portoClienteTCP = resposta.getPortoClienteTCP();
             System.out.println("[Cliente] Servidor encontrado em: " + ipPrincipal.getHostAddress() + ":" + portoClienteTCP);
 
+            // Regra dos 20 segundos (SÓ SE APLICA SE O SERVIDOR FOR O MESMO DO CRASH ANTERIOR)
             if (ultimoIP != null && ultimoPorto != -1 &&
                     ipPrincipal.equals(ultimoIP) && portoClienteTCP == ultimoPorto) {
 
                 System.out.println("[Cliente] O Servidor principal é o mesmo que falhou. A tentar novamente em 20 segundos...");
                 try { Thread.sleep(20000); } catch (InterruptedException ignored) {}
-
+                // Tenta recursivamente
                 return encontrarServidor(ipDir, portoDir, null, -1);
             }
 
             return true;
 
-        } catch (SocketTimeoutException e) {
-            System.err.println("[Cliente] Timeout: O Serviço de Diretoria não respondeu.");
-            return false;
         } catch (Exception e) {
-            System.err.println("[Cliente] Erro ao comunicar com a Diretoria: " + e.getMessage());
+            System.err.println("[Cliente] Erro ao contactar Diretoria: " + e.getMessage());
             return false;
         }
     }
 
-    private static void iniciarSessao() {
-        try (Socket socket = new Socket(ipPrincipal, portoClienteTCP);
-             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+    // Retorna true se o utilizador escolheu sair/logout. Retorna false se a ligação caiu.
+    private static boolean iniciarSessao() {
+        try (Socket socket = new Socket(ipPrincipal, portoClienteTCP)) {
+            out = new ObjectOutputStream(socket.getOutputStream());
+            in = new ObjectInputStream(socket.getInputStream());
 
-            System.out.println("[Cliente] Ligação TCP estabelecida com o Servidor Principal.");
+            System.out.println("[Cliente] Ligação TCP estabelecida.");
 
-            // 1. Fase de Autenticação/Registo
-            while (socket.isConnected() && estadoLogin == ESTADO_INICIAL) {
-                mostrarMenuInicial(out, in);
+            while (socket.isConnected()) {
+                if (estadoLogin == ESTADO_INICIAL) {
+                    // Se retornar false, quer dizer que escolheu "Sair" da app
+                    if (!mostrarMenuInicial()) return true;
+                } else if (estadoLogin == ESTADO_DOCENTE) {
+                    // Se retornar false, quer dizer que escolheu "Logout"
+                    if (!menuDocente()) return true;
+                } else if (estadoLogin == ESTADO_ESTUDANTE) {
+                    // Se retornar false, quer dizer que escolheu "Logout"
+                    if (!menuEstudante()) return true;
+                }
             }
+            return true;
 
-            // 2. Fase de Interação (após o login)
-            if (estadoLogin == ESTADO_DOCENTE) {
-                menuDocente(out, in);
-            } else if (estadoLogin == ESTADO_ESTUDANTE) {
-                menuEstudante(out, in);
-            }
-
-        } catch (ConnectException e) {
-            System.err.println("[Cliente] Falha de conexão TCP. O servidor pode ter caído. A solicitar novo servidor...");
-        } catch (SocketException | EOFException e) {
-            System.err.println("[Cliente] Conexão TCP perdida. O servidor encerrou a ligação. A solicitar novo servidor...");
         } catch (Exception e) {
-            System.err.println("[Cliente] Erro inesperado na sessão: " + e.getMessage());
+            System.err.println("[Cliente] Ligação perdida: " + e.getMessage());
+            return false; // Foi um crash, ativa a regra dos 20s no main
         }
-        System.out.println("[Cliente] Sessão encerrada.");
     }
 
-    private static void mostrarMenuInicial(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+    // Retorna false para Sair da App
+    private static boolean mostrarMenuInicial() throws Exception {
         System.out.println("\n--- Menu Principal ---");
-        System.out.println("1. Autenticar (Docente/Estudante)");
-        System.out.println("2. Registar Novo Docente");
-        System.out.println("3. Registar Novo Estudante");
+        System.out.println("1. Autenticar");
+        System.out.println("2. Registar Docente");
+        System.out.println("3. Registar Estudante");
         System.out.println("0. Sair");
         System.out.print("Opção: ");
 
-        if (!scanner.hasNextInt()) {
-            scanner.next();
-            return;
+        String op = scanner.nextLine();
+        switch (op) {
+            case "1": processarLogin(); break;
+            case "2": processarRegistoDocente(); break;
+            case "3": processarRegistoEstudante(); break;
+            case "0": return false; // Sair
+            default: System.out.println("Opção inválida.");
         }
-        int opcao = scanner.nextInt();
-        scanner.nextLine();
-
-        switch (opcao) {
-            case 1:
-                processarLogin(out, in);
-                break;
-            case 2:
-                processarRegistoDocente(out, in);
-                break;
-            case 3:
-                processarRegistoEstudante(out, in);
-                break;
-            case 0:
-                System.exit(0);
-                break;
-            default:
-                System.out.println("Opção inválida.");
-        }
+        return true;
     }
 
-    private static void processarRegistoDocente(ObjectOutputStream out, ObjectInputStream in) throws Exception {
-        System.out.println("\n--- Registo de Docente ---");
-        System.out.print("Nome: ");
-        String nome = scanner.nextLine();
-        System.out.print("Email: ");
-        String email = scanner.nextLine();
-        System.out.print("Password: ");
-        String password = scanner.nextLine();
-        System.out.print("Código Único de Docente: ");
-        String codUnico = scanner.nextLine();
+    private static void processarLogin() throws IOException, ClassNotFoundException {
+        System.out.print("Email: "); String email = scanner.nextLine();
+        System.out.print("Password: "); String pass = scanner.nextLine();
 
-        Docente novoDocente = new Docente(nome, email, password);
-
-        // Utiliza o construtor correto: Docente + Código Único
-        MsgRegisto msg = new MsgRegisto(novoDocente, codUnico);
-        out.writeObject(msg);
-        out.flush();
-
-        String resposta = (String) in.readObject();
-        System.out.println("[Servidor Diz]: " + resposta);
-    }
-
-    private static void processarRegistoEstudante(ObjectOutputStream out, ObjectInputStream in) throws Exception {
-        System.out.println("\n--- Registo de Estudante ---");
-        System.out.print("Nome: ");
-        String nome = scanner.nextLine();
-        System.out.print("Email: ");
-        String email = scanner.nextLine();
-        System.out.print("Password: ");
-        String password = scanner.nextLine();
-        System.out.print("Número de Estudante: ");
-        String numEstudante = scanner.nextLine();
-
-        Estudante novoEstudante = new Estudante(numEstudante, nome, email, password);
-
-        // Utiliza o construtor correto: Estudante
-        MsgRegisto msg = new MsgRegisto(novoEstudante);
-        out.writeObject(msg);
-        out.flush();
-
-        String resposta = (String) in.readObject();
-        System.out.println("[Servidor Diz]: " + resposta);
-    }
-
-    private static void processarLogin(ObjectOutputStream out, ObjectInputStream in) throws Exception {
-        System.out.println("\n--- Autenticação ---");
-        System.out.print("Email: ");
-        String email = scanner.nextLine();
-        System.out.print("Password: ");
-        String password = scanner.nextLine();
-
-        MsgLogin msg = new MsgLogin(email, password);
-        out.writeObject(msg);
+        out.writeObject(new MsgLogin(email, pass));
         out.flush();
 
         Object resposta = in.readObject();
+        String respStr = (String) resposta;
+        System.out.println("[Servidor]: " + respStr);
 
-        if (resposta instanceof String) {
-            String respStr = (String) resposta;
-            System.out.println("[Servidor Diz]: " + respStr);
-
-            if (respStr.contains("sucesso Docente")) {
-                estadoLogin = ESTADO_DOCENTE;
-                System.out.println("-> Autenticação de Docente concluída com sucesso.");
-            } else if (respStr.contains("sucesso Estudante")) {
-                estadoLogin = ESTADO_ESTUDANTE;
-                System.out.println("-> Autenticação de Estudante concluída com sucesso.");
-            } else {
-                System.out.println("-> Falha na autenticação.");
-            }
-        }
+        if (respStr.contains("sucesso Docente")) estadoLogin = ESTADO_DOCENTE;
+        else if (respStr.contains("sucesso Estudante")) estadoLogin = ESTADO_ESTUDANTE;
     }
 
-    private static void menuDocente(ObjectOutputStream out, ObjectInputStream in) throws Exception {
-        while (true) {
-            System.out.println("\n--- MENU DOCENTE ---");
-            System.out.println("1. Criar Nova Pergunta");
-            System.out.println("2. Listar Minhas Perguntas (Futuro)");
-            System.out.println("0. Logout");
-            System.out.print("Opção: ");
+    private static void processarRegistoDocente() throws IOException, ClassNotFoundException {
+        System.out.print("Nome: "); String nome = scanner.nextLine();
+        System.out.print("Email: "); String email = scanner.nextLine();
+        System.out.print("Password: "); String pass = scanner.nextLine();
+        System.out.print("Código Único: "); String token = scanner.nextLine();
 
-            String op = scanner.nextLine();
-
-            if (op.equals("1")) {
-                criarPergunta(out, in);
-            } else if (op.equals("2")) {
-                System.out.println("Funcionalidade ainda não implementada.");
-            } else if (op.equals("0")) {
-                System.out.println("[Docente] A sair...");
-                break; // Sai do loop e volta ao estado inicial (Main)
-            } else {
-                System.out.println("Opção inválida.");
-            }
-        }
-        estadoLogin = ESTADO_INICIAL; // Reset do estado ao sair
+        out.writeObject(new MsgRegisto(new Docente(nome, email, pass), token));
+        out.flush();
+        System.out.println("[Servidor]: " + in.readObject());
     }
 
-    private static void menuEstudante(ObjectOutputStream out, ObjectInputStream in) {
-        System.out.println("\n--- Menu Estudante (Logado) ---");
-        System.out.println("Funcionalidades pendentes.");
+    private static void processarRegistoEstudante() throws IOException, ClassNotFoundException {
+        System.out.print("Nome: "); String nome = scanner.nextLine();
+        System.out.print("Email: "); String email = scanner.nextLine();
+        System.out.print("Password: "); String pass = scanner.nextLine();
+        System.out.print("Número Estudante: "); String num = scanner.nextLine();
+
+        out.writeObject(new MsgRegisto(new Estudante(num, nome, email, pass)));
+        out.flush();
+        System.out.println("[Servidor]: " + in.readObject());
+    }
+
+    // Retorna false para fazer Logout
+    private static boolean menuDocente() throws Exception {
+        System.out.println("\n--- DOCENTE ---");
+        System.out.println("1. Criar Pergunta");
         System.out.println("0. Logout");
+        System.out.print("> ");
 
-        scanner.nextLine();
-        estadoLogin = ESTADO_INICIAL;
-        System.out.println("[Estudante] Sessão encerrada (Logout).");
+        String op = scanner.nextLine();
+        if (op.equals("1")) {
+            criarPergunta();
+        } else if (op.equals("0")) {
+            estadoLogin = ESTADO_INICIAL;
+            System.out.println("Logout efetuado.");
+            return false; // Volta ao loop de iniciarSessao que retorna true
+        }
+        return true;
     }
 
-
-    private static void criarPergunta(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+    private static void criarPergunta() throws Exception {
         System.out.println("\n--- Nova Pergunta ---");
+        System.out.print("Enunciado: "); String enunciado = scanner.nextLine();
+        System.out.print("Início (YYYY-MM-DD HH:mm:ss): "); String inicio = scanner.nextLine();
+        System.out.print("Fim (YYYY-MM-DD HH:mm:ss): "); String fim = scanner.nextLine();
 
-        System.out.print("Enunciado da pergunta: ");
-        String enunciado = scanner.nextLine();
-
-        System.out.print("Data/Hora Início (ex: 2025-12-01 10:00:00): ");
-        String inicio = scanner.nextLine();
-
-        System.out.print("Data/Hora Fim (ex: 2025-12-01 12:00:00): ");
-        String fim = scanner.nextLine();
-
-        // Recolher Opções
-        java.util.List<Opcao> opcoes = new java.util.ArrayList<>();
-        System.out.println("Adicione as opções de resposta (Mínimo 2).");
-        System.out.println("Deixe o texto vazio para terminar a inserção.");
-
-        char letraAtual = 'a';
+        List<Opcao> opcoes = new ArrayList<>();
+        char letra = 'a';
+        System.out.println("Inserir opções (Enter vazio para terminar):");
         while (true) {
-            System.out.print("Opção " + letraAtual + ") Texto: ");
+            System.out.print(letra + ") ");
             String texto = scanner.nextLine();
 
             if (texto.isEmpty()) {
                 if (opcoes.size() < 2) {
-                    System.out.println("Erro: Tem de inserir pelo menos 2 opções.");
+                    System.out.println("Erro: Mínimo 2 opções.");
                     continue;
                 }
                 break;
             }
 
-            System.out.print("Esta é a opção correta? (s/n): ");
-            String isCorretaStr = scanner.nextLine();
-            boolean isCorreta = isCorretaStr.equalsIgnoreCase("s");
-
-            opcoes.add(new Opcao(String.valueOf(letraAtual), texto, isCorreta));
-            letraAtual++;
+            System.out.print("Correta? (s/n): ");
+            boolean correta = scanner.nextLine().equalsIgnoreCase("s");
+            opcoes.add(new Opcao(String.valueOf(letra++), texto, correta));
         }
 
-        // Enviar para o servidor
-        // Nota: Passamos -1 no ID porque o Servidor já sabe quem somos pela sessão (ClientHandler)
-        MsgCriarPergunta msg = new MsgCriarPergunta(-1, enunciado, inicio, fim, opcoes);
-        out.writeObject(msg);
+        // ID -1 pois o servidor sabe quem é pelo login
+        out.writeObject(new MsgCriarPergunta(-1, enunciado, inicio, fim, opcoes));
         out.flush();
+        System.out.println("[Servidor]: " + in.readObject());
+    }
 
-        // Ler resposta do servidor
-        System.out.println("A enviar pergunta...");
-        String resposta = (String) in.readObject();
-        System.out.println("[Servidor]: " + resposta);
+    // Retorna false para fazer Logout
+    private static boolean menuEstudante() {
+        System.out.println("\n--- ESTUDANTE ---");
+        System.out.println("1. Responder a Pergunta (Brevemente)");
+        System.out.println("0. Logout");
+        System.out.print("> ");
+
+        String op = scanner.nextLine();
+        if (op.equals("0")) {
+            estadoLogin = ESTADO_INICIAL;
+            System.out.println("Logout efetuado.");
+            return false;
+        } else {
+            System.out.println("Funcionalidade em desenvolvimento.");
+        }
+        return true;
     }
 }
