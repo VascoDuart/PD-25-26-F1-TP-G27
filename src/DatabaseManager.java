@@ -70,7 +70,16 @@ public class DatabaseManager {
                 "FOREIGN KEY(pergunta_id) REFERENCES Pergunta(id) ON DELETE CASCADE" +
                 ");";
 
-        // TODO: Faltam a tabela Resposta
+        String sqlResposta = "CREATE TABLE IF NOT EXISTS Resposta (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "estudante_id INTEGER NOT NULL, " +
+                "pergunta_id INTEGER NOT NULL, " +
+                "opcao_escolhida TEXT NOT NULL, " +
+                "data_hora TEXT NOT NULL, " +
+                "UNIQUE(estudante_id, pergunta_id), " +
+                "FOREIGN KEY(estudante_id) REFERENCES Estudante(id), " +
+                "FOREIGN KEY(pergunta_id) REFERENCES Pergunta(id)" +
+                ");";
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sqlConfig);
@@ -78,6 +87,7 @@ public class DatabaseManager {
             stmt.execute(sqlEstudante);
             stmt.execute(sqlPergunta);
             stmt.execute(sqlOpcao);
+            stmt.execute(sqlResposta);
 
             System.out.println("[BD] Tabelas verificadas/criadas (Docente, Estudante, Pergunta, Opcao).");
         }

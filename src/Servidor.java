@@ -90,8 +90,10 @@ public class Servidor {
             try {
                 while (true) {
                     Socket s = srvSocketClientes.accept();
-                    // Cria uma thread para atender este cliente específico
-                    new Thread(() -> atenderCliente(s)).start();
+                    // AGORA USAMOS O CLIENT HANDLER!
+                    // Passamos a ligação à BD para ele poder fazer logins e criar perguntas
+                    ClientHandler handler = new ClientHandler(s, this.db);
+                    new Thread(handler).start();
                 }
             } catch (IOException e) {
                 System.err.println("[Clientes] Erro no socket: " + e.getMessage());

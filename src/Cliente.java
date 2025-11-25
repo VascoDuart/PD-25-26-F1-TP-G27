@@ -237,14 +237,28 @@ public class Cliente {
         }
     }
 
-    private static void menuDocente(ObjectOutputStream out, ObjectInputStream in) {
-        System.out.println("\n--- Menu Docente (Logado) ---");
-        System.out.println("Funcionalidades pendentes.");
-        System.out.println("0. Logout");
+    private static void menuDocente(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        while (true) {
+            System.out.println("\n--- MENU DOCENTE ---");
+            System.out.println("1. Criar Nova Pergunta");
+            System.out.println("2. Listar Minhas Perguntas (Futuro)");
+            System.out.println("0. Logout");
+            System.out.print("Opção: ");
 
-        scanner.nextLine();
-        estadoLogin = ESTADO_INICIAL;
-        System.out.println("[Docente] Sessão encerrada (Logout).");
+            String op = scanner.nextLine();
+
+            if (op.equals("1")) {
+                criarPergunta(out, in);
+            } else if (op.equals("2")) {
+                System.out.println("Funcionalidade ainda não implementada.");
+            } else if (op.equals("0")) {
+                System.out.println("[Docente] A sair...");
+                break; // Sai do loop e volta ao estado inicial (Main)
+            } else {
+                System.out.println("Opção inválida.");
+            }
+        }
+        estadoLogin = ESTADO_INICIAL; // Reset do estado ao sair
     }
 
     private static void menuEstudante(ObjectOutputStream out, ObjectInputStream in) {
@@ -255,5 +269,56 @@ public class Cliente {
         scanner.nextLine();
         estadoLogin = ESTADO_INICIAL;
         System.out.println("[Estudante] Sessão encerrada (Logout).");
+    }
+
+
+    private static void criarPergunta(ObjectOutputStream out, ObjectInputStream in) throws Exception {
+        System.out.println("\n--- Nova Pergunta ---");
+
+        System.out.print("Enunciado da pergunta: ");
+        String enunciado = scanner.nextLine();
+
+        System.out.print("Data/Hora Início (ex: 2025-12-01 10:00:00): ");
+        String inicio = scanner.nextLine();
+
+        System.out.print("Data/Hora Fim (ex: 2025-12-01 12:00:00): ");
+        String fim = scanner.nextLine();
+
+        // Recolher Opções
+        java.util.List<Opcao> opcoes = new java.util.ArrayList<>();
+        System.out.println("Adicione as opções de resposta (Mínimo 2).");
+        System.out.println("Deixe o texto vazio para terminar a inserção.");
+
+        char letraAtual = 'a';
+        while (true) {
+            System.out.print("Opção " + letraAtual + ") Texto: ");
+            String texto = scanner.nextLine();
+
+            if (texto.isEmpty()) {
+                if (opcoes.size() < 2) {
+                    System.out.println("Erro: Tem de inserir pelo menos 2 opções.");
+                    continue;
+                }
+                break;
+            }
+
+            System.out.print("Esta é a opção correta? (s/n): ");
+            String isCorretaStr = scanner.nextLine();
+            boolean isCorreta = isCorretaStr.equalsIgnoreCase("s");
+
+            opcoes.add(new Opcao(String.valueOf(letraAtual), texto, isCorreta));
+            letraAtual++;
+        }
+
+        // Enviar para o servidor
+        // Nota: Passamos -1 no ID porque o Servidor já sabe quem somos pela sessão (ClientHandler)
+        MsgCriarPergunta msg = new MsgCriarPergunta(-1, enunciado, inicio, fim, opcoes);
+        out.writeObject(msg);
+        out.flush();
+
+        // Ler resposta do servidor
+        System.out.println("A enviar pergunta...");
+        String resposta = (String) in.readObject();
+        System.out.println("[Servidor]: " + resposta);
     }
 }
