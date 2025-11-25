@@ -234,6 +234,85 @@ public class DatabaseManager {
         }
     }
 
+    // ... dentro de DatabaseManager ...
+
+    // 1. Buscar Pergunta pelo Código
+    public Pergunta obterPerguntaPorCodigo(String codigo) {
+        String sql = "SELECT id, enunciado, inicio, fim FROM Pergunta WHERE codigo_acesso = ?";
+        Pergunta p = null;
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, codigo);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                int pId = rs.getInt("id");
+                String enunc = rs.getString("enunciado");
+                String ini = rs.getString("inicio");
+                String fim = rs.getString("fim");
+
+                // Agora buscar as opções
+                List<Opcao> opcoes = obterOpcoes(pId);
+                p = new Pergunta(enunc, ini, fim, opcoes);
+                // Guardamos o ID na classe pergunta (se tiveres o setter)
+                // p.setId(pId);
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao obter pergunta: " + e.getMessage());
+        }
+        return p;
+    }
+
+    // Método auxiliar para buscar opções
+    private List<Opcao> obterOpcoes(int perguntaId) throws SQLException {
+        List<Opcao> lista = new java.util.ArrayList<>();
+        String sql = "SELECT letra_opcao, texto_opcao FROM Opcao WHERE pergunta_id = ? ORDER BY letra_opcao";
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, perguntaId);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                // Nota: Não enviamos se é correta ou não para o aluno não fazer batota!
+                lista.add(new Opcao(rs.getString("letra_opcao"), rs.getString("texto_opcao"), false));
+            }
+        }
+        return lista;
+    }
+
+    // 2. Gravar Resposta
+    public synchronized boolean registarResposta(int estudanteId, String codigoAcesso, String letra) {
+        // Primeiro descobrimos o ID da pergunta
+        String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
+
+        // Depois inserimos (O tempo atual é automático ou passado pelo Java)
+        String sqlInsert = "INSERT INTO Resposta(estudante_id, pergunta_id, opcao_escolhida, data_hora) VALUES(?,?,?,?)";
+
+        try {
+            // Passo 1: ID da Pergunta
+            int perguntaId = -1;
+            try (PreparedStatement ps1 = conn.prepareStatement(sqlId)) {
+                ps1.setString(1, codigoAcesso);
+                ResultSet rs = ps1.executeQuery();
+                if (rs.next()) perguntaId = rs.getInt("id");
+            }
+            if (perguntaId == -1) return false;
+
+            // Passo 2: Inserir Resposta
+            try (PreparedStatement ps2 = conn.prepareStatement(sqlInsert)) {
+                ps2.setInt(1, estudanteId);
+                ps2.setInt(2, perguntaId);
+                ps2.setString(3, letra);
+                ps2.setString(4, java.time.LocalDateTime.now().toString()); // Data atual
+                ps2.executeUpdate();
+                System.out.println("[BD] Resposta registada para a pergunta " + perguntaId);
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao gravar resposta (já respondeu?): " + e.getMessage());
+            return false;
+        }
+    }
+
     // --- FECHAR LIGAÇÃO ---
 
     public void desconectar() {

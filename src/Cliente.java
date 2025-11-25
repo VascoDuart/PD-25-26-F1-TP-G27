@@ -239,20 +239,55 @@ public class Cliente {
     }
 
     // Retorna false para fazer Logout
-    private static boolean menuEstudante() {
+
+
+    private static boolean menuEstudante() throws Exception {
         System.out.println("\n--- ESTUDANTE ---");
-        System.out.println("1. Responder a Pergunta (Brevemente)");
+        System.out.println("1. Responder a Pergunta");
         System.out.println("0. Logout");
         System.out.print("> ");
 
         String op = scanner.nextLine();
-        if (op.equals("0")) {
+        if (op.equals("1")) {
+            responderPergunta();
+        } else if (op.equals("0")) {
             estadoLogin = ESTADO_INICIAL;
-            System.out.println("Logout efetuado.");
-            return false;
-        } else {
-            System.out.println("Funcionalidade em desenvolvimento.");
+            return false; // Logout
         }
         return true;
+    }
+
+    private static void responderPergunta() throws Exception {
+        System.out.print("Introduza o Código de Acesso: ");
+        String codigo = scanner.nextLine();
+
+        // 1. Pedir Pergunta
+        out.writeObject(new MsgObterPergunta(codigo));
+        out.flush();
+
+        Object resposta = in.readObject();
+        if (resposta == null) {
+            System.out.println("Erro: Pergunta não encontrada ou código inválido.");
+            return;
+        }
+
+        if (resposta instanceof Pergunta) {
+            Pergunta p = (Pergunta) resposta;
+            System.out.println("\n--- PERGUNTA ---");
+            System.out.println(p.getEnunciado()); // Tens de ter este getter na classe Pergunta
+            for (Opcao o : p.getOpcoes()) {       // Tens de ter este getter na classe Pergunta
+                System.out.println(o.getLetra() + ") " + o.getTexto());
+            }
+
+            System.out.print("A sua resposta (letra): ");
+            String letra = scanner.nextLine();
+
+            // 2. Enviar Resposta
+            // O ID do aluno (-1) é ignorado porque o handler usa o da sessão, mas a classe pede-o no construtor
+            out.writeObject(new MsgResponderPergunta(-1, codigo, letra));
+            out.flush();
+
+            System.out.println("[Servidor]: " + in.readObject());
+        }
     }
 }
