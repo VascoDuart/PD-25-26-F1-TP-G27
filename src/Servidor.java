@@ -62,6 +62,7 @@ public class Servidor {
                 obterBDdoPrincipal(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
             }
 
+            iniciarHeartbeats();
             // Loop para manter o servidor vivo
             System.out.println("[Servidor] Em funcionamento...");
             while(true) { Thread.sleep(10000); }
@@ -69,6 +70,31 @@ public class Servidor {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private void iniciarHeartbeats() {
+        // ... (Implementação da thread de 5 segundos que chama registarNoDiretorio())
+        new Thread(() -> {
+            System.out.println("[Servidor] A iniciar envio de Heartbeats (5s).");
+            while (true) {
+                try {
+                    // registarNoDiretorio() envia a mensagem e a Diretoria atualiza o timestamp
+                    MsgRespostaDiretoria resposta = registarNoDiretorio();
+
+                    if (resposta == null || !resposta.existeServidor()) {
+                        System.err.println("[Servidor] FALHA FATAL: Diretoria não respondeu ao Heartbeat. O servidor deve terminar se a falha for persistente.");
+                        // Neste ponto, você pode optar por terminar o servidor ou tentar novamente
+                    }
+
+                    Thread.sleep(5000); // 5 segundos
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    System.err.println("[Heartbeat] Erro ao enviar Heartbeat: " + e.getMessage());
+                }
+            }
+        }, "HeartbeatSender").start();
     }
 
     private void prepararBaseDeDados() {
@@ -160,7 +186,7 @@ public class Servidor {
             byte[] buffer = new byte[4096];
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             socket.receive(packet);
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData(), 0, packet.getLength()));
             return (MsgRespostaDiretoria) ois.readObject();
         } catch (Exception e) { return null; }
     }
