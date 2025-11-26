@@ -6,34 +6,39 @@ import java.util.UUID;
 
 public class ClientHandler implements Runnable {
 
-    // Constantes de Estado do Cliente
     private static final int ESTADO_INICIAL = 0;
     private static final int ESTADO_DOCENTE = 1;
     private static final int ESTADO_ESTUDANTE = 2;
 
     private int estadoLogin = ESTADO_INICIAL;
-    private int userId; // ID do utilizador na BD (para saber quem está a fazer as ações)
+    private int userId;
     private String userEmail;
 
     private final Socket clientSocket;
     private final DatabaseManager dbManager;
+    private final ObjectOutputStream out;
+    private final ObjectInputStream in;
 
-    // Timeout para login (30 segundos) para não ocupar recursos com clientes "mortos"
     private static final int AUTH_TIMEOUT_MS = 30000;
 
-    public ClientHandler(Socket socket, DatabaseManager dbManager) {
+    public ClientHandler(Socket socket, DatabaseManager dbManager) throws IOException {
         this.clientSocket = socket;
         this.dbManager = dbManager;
+
+        System.out.println("[Handler] A inicializar streams para " + socket.getInetAddress());
+
+        // CORREÇÃO CRÍTICA: Flush obrigatório para enviar o cabeçalho
+        this.out = new ObjectOutputStream(clientSocket.getOutputStream());
+        this.out.flush();
+
+        this.in = new ObjectInputStream(clientSocket.getInputStream());
+
+        System.out.println("[Handler] Streams criadas com sucesso.");
     }
 
     @Override
     public void run() {
-        System.out.println("[Handler] Novo Cliente conectado: " + clientSocket.getInetAddress());
-
-        try (ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream());
-             ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream())) {
-
-            // Define timeout apenas para a fase de login
+        try {
             clientSocket.setSoTimeout(AUTH_TIMEOUT_MS);
 
             // --- FASE 1: AUTENTICAÇÃO ---
@@ -42,154 +47,100 @@ public class ClientHandler implements Runnable {
                     Object msg = in.readObject();
 
                     if (msg instanceof MsgRegisto) {
-                        processarRegisto((MsgRegisto) msg, out);
+                        processarRegisto((MsgRegisto) msg);
                     } else if (msg instanceof MsgLogin) {
-                        processarLogin((MsgLogin) msg, out);
+                        processarLogin((MsgLogin) msg);
                     } else {
-                        out.writeObject("ERRO: Deve fazer login ou registo primeiro.");
-                        out.flush();
+                        enviarObjeto("ERRO: Deve fazer login ou registo primeiro.");
                     }
                 } catch (SocketTimeoutException e) {
-                    out.writeObject("TIMEOUT: Demorou muito tempo a fazer login.");
-                    return; // Encerra a thread
+                    enviarObjeto("TIMEOUT: Tempo de login esgotado.");
+                    return;
                 }
             }
 
-            // Remove timeout para a fase de interação normal
             clientSocket.setSoTimeout(0);
-            System.out.println("[Handler] Cliente " + userEmail + " autenticado. A iniciar interação.");
+            System.out.println("[Handler] Cliente " + userEmail + " autenticado. Pronto.");
 
-            // --- FASE 2: INTERAÇÃO (LOOP PRINCIPAL) ---
+            // --- FASE 2: INTERAÇÃO ---
             while (true) {
-                Object msg = in.readObject();
+                Object msg = in.readObject(); // Fica aqui bloqueado à espera de pedidos
 
-                // Se for Docente
                 if (estadoLogin == ESTADO_DOCENTE) {
-                    if (msg instanceof MsgCriarPergunta) {
-                        processarCriarPergunta((MsgCriarPergunta) msg, out);
-                    }
+                    if (msg instanceof MsgCriarPergunta) processarCriarPergunta((MsgCriarPergunta) msg);
                 }
-
-                // Se for Estudante
                 else if (estadoLogin == ESTADO_ESTUDANTE) {
-                    if (msg instanceof MsgObterPergunta) {
-                        processarObterPergunta((MsgObterPergunta) msg, out);
-                    } else if (msg instanceof MsgResponderPergunta) {
-                        processarResponderPergunta((MsgResponderPergunta) msg, out);
-                    }
+                    if (msg instanceof MsgObterPergunta) processarObterPergunta((MsgObterPergunta) msg);
+                    else if (msg instanceof MsgResponderPergunta) processarResponderPergunta((MsgResponderPergunta) msg);
                 }
             }
 
-        } catch (EOFException | SocketException e) {
-            System.out.println("[Handler] Cliente desconectou-se: " + userEmail);
+        } catch (EOFException e) {
+            System.out.println("[Handler] Cliente desconectou-se (EOF).");
+        } catch (SocketException e) {
+            System.out.println("[Handler] Ligação perdida (SocketException).");
         } catch (Exception e) {
-            System.err.println("[Handler] Erro inesperado: " + e.getMessage());
+            System.err.println("[Handler] Erro inesperado na thread: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try { clientSocket.close(); } catch (IOException e) {}
         }
     }
 
-    // ---------------------------------------------------------
-    // MÉTODOS DE AUTENTICAÇÃO
-    // ---------------------------------------------------------
-
-    private void processarLogin(MsgLogin msg, ObjectOutputStream out) throws IOException {
-        String email = msg.getEmail();
-        String password = msg.getPassword();
-        String resposta;
-
-        // Tenta Docente
-        if (dbManager.autenticarDocente(email, password)) {
-            estadoLogin = ESTADO_DOCENTE;
-            userEmail = email;
-            userId = dbManager.obterIdDocente(email); // Guarda o ID para usar depois
-            resposta = "SUCESSO: Login efetuado com sucesso Docente";
-        }
-        // Tenta Estudante
-        else if (dbManager.autenticarEstudante(email, password)) {
-            estadoLogin = ESTADO_ESTUDANTE;
-            userEmail = email;
-            userId = dbManager.obterIdEstudante(email); // Guarda o ID para usar depois
-            resposta = "SUCESSO: Login efetuado com sucesso Estudante";
-        }
-        // Falhou
-        else {
-            resposta = "ERRO: Credenciais inválidas.";
-        }
-
-        out.writeObject(resposta);
+    private synchronized void enviarObjeto(Object obj) throws IOException {
+        out.writeObject(obj);
         out.flush();
     }
 
-    private void processarRegisto(MsgRegisto msg, ObjectOutputStream out) throws IOException {
-        boolean sucesso = false;
+    // --- LÓGICA DE NEGÓCIO ---
 
+    private void processarRegisto(MsgRegisto msg) throws IOException {
+        boolean sucesso = false;
         if (msg.isDocente()) {
+            if (!dbManager.validarCodigoDocente(msg.getCodigoDocente())) {
+                enviarObjeto("ERRO: Código de docente inválido.");
+                return;
+            }
             sucesso = dbManager.registarDocente(msg.getDocente());
         } else if (msg.isEstudante()) {
             sucesso = dbManager.registarEstudante(msg.getEstudante());
         }
 
-        if (sucesso) {
-            out.writeObject("SUCESSO: Utilizador registado!");
-        } else {
-            out.writeObject("ERRO: Registo falhou (Email já existe?).");
-        }
-        out.flush();
+        if (sucesso) enviarObjeto("SUCESSO: Utilizador registado!");
+        else enviarObjeto("ERRO: Falha no registo (Email duplicado?).");
     }
 
-    // ---------------------------------------------------------
-    // MÉTODOS DO DOCENTE
-    // ---------------------------------------------------------
+    private void processarLogin(MsgLogin msg) throws IOException {
+        if (dbManager.autenticarDocente(msg.getEmail(), msg.getPassword())) {
+            estadoLogin = ESTADO_DOCENTE;
+            userEmail = msg.getEmail();
+            userId = dbManager.obterIdDocente(msg.getEmail());
+            enviarObjeto("SUCESSO: Login Docente");
+        } else if (dbManager.autenticarEstudante(msg.getEmail(), msg.getPassword())) {
+            estadoLogin = ESTADO_ESTUDANTE;
+            userEmail = msg.getEmail();
+            userId = dbManager.obterIdEstudante(msg.getEmail());
+            enviarObjeto("SUCESSO: Login Estudante");
+        } else {
+            enviarObjeto("ERRO: Credenciais inválidas.");
+        }
+    }
 
-    private void processarCriarPergunta(MsgCriarPergunta msg, ObjectOutputStream out) throws IOException {
-        // Gera um código aleatório simples (ex: A1B2C3)
+    private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String codAcesso = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-
-        boolean sucesso = dbManager.criarPergunta(
-                userId, // Usa o ID do docente logado
-                msg.getEnunciado(),
-                codAcesso,
-                msg.getInicio(),
-                msg.getFim(),
-                msg.getOpcoes()
-        );
-
-        if (sucesso) {
-            out.writeObject("SUCESSO: Pergunta criada. Código de acesso: " + codAcesso);
-        } else {
-            out.writeObject("ERRO: Falha ao criar pergunta na BD.");
-        }
-        out.flush();
+        boolean sucesso = dbManager.criarPergunta(userId, msg.getEnunciado(), codAcesso, msg.getInicio(), msg.getFim(), msg.getOpcoes());
+        if (sucesso) enviarObjeto("SUCESSO: Pergunta criada. Código: " + codAcesso);
+        else enviarObjeto("ERRO: Falha na BD.");
     }
 
-    // ---------------------------------------------------------
-    // MÉTODOS DO ESTUDANTE
-    // ---------------------------------------------------------
-
-    private void processarObterPergunta(MsgObterPergunta msg, ObjectOutputStream out) throws IOException {
-        System.out.println("[Handler] Aluno pede pergunta: " + msg.getCodigoAcesso());
-
-        // Vai à BD buscar a pergunta
+    private void processarObterPergunta(MsgObterPergunta msg) throws IOException {
         Pergunta p = dbManager.obterPerguntaPorCodigo(msg.getCodigoAcesso());
-
-        // Envia o objeto Pergunta (ou null se não existir)
-        out.writeObject(p);
-        out.flush();
+        enviarObjeto(p);
     }
 
-    private void processarResponderPergunta(MsgResponderPergunta msg, ObjectOutputStream out) throws IOException {
-        System.out.println("[Handler] Aluno responde à pergunta: " + msg.getCodigoAcesso());
-
-        // Grava a resposta na BD usando o ID do aluno logado (userId)
+    private void processarResponderPergunta(MsgResponderPergunta msg) throws IOException {
         boolean sucesso = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
-
-        if (sucesso) {
-            out.writeObject("SUCESSO: Resposta registada!");
-        } else {
-            out.writeObject("ERRO: Já respondeste ou código inválido.");
-        }
-        out.flush();
+        if (sucesso) enviarObjeto("SUCESSO: Resposta submetida.");
+        else enviarObjeto("ERRO: Resposta rejeitada.");
     }
 }
