@@ -62,20 +62,24 @@ public class ClientHandler implements Runnable {
                     if (msg instanceof MsgCriarPergunta) {
                         processarCriarPergunta((MsgCriarPergunta) msg);
                     }
-                    // --- NOVAS FUNCIONALIDADES ---
                     else if (msg instanceof MsgObterPerguntas) {
                         List<Pergunta> lista = dbManager.obterPerguntasDoDocente(userId);
                         enviarObjeto(lista);
                     }
+                    // --- CORREÇÃO: ADICIONAR ESTE BLOCO AQUI ---
+                    else if (msg instanceof MsgObterPergunta) {
+                        // O Docente também precisa de obter uma pergunta individual para o CSV
+                        processarObterPergunta((MsgObterPergunta) msg);
+                    }
+                    // -------------------------------------------
                     else if (msg instanceof MsgObterRespostas) {
                         String codigo = ((MsgObterRespostas) msg).getCodigoAcesso();
-                        // Verifica se existe (podia verificar também se pertence ao docente)
                         Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
                         if (p != null) {
                             List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
                             enviarObjeto(resps);
                         } else {
-                            enviarObjeto(new ArrayList<RespostaEstudante>()); // Lista vazia
+                            enviarObjeto(new ArrayList<RespostaEstudante>());
                         }
                     }
                 }

@@ -89,34 +89,48 @@ public class Cliente {
                 vista.mostrarMensagem((String) coms.receber());
             }
             // --- NOVO: EXPORTAR CSV ---
-            else if (op == 2) {
-                coms.enviar(new MsgObterPerguntas()); // Usa a classe renomeada
-                Object resp = coms.receber();
+            else if (op == 2) { // Exportar Resultados (CSV)
+                try {
+                    // 1. Listar perguntas (Resumidas)
+                    coms.enviar(new MsgObterPerguntas());
+                    Object resp = coms.receber();
 
-                if (resp instanceof List) {
-                    List<Pergunta> lista = (List<Pergunta>) resp;
-                    if (lista.isEmpty()) {
-                        vista.mostrarErro("Não tem perguntas.");
-                    } else {
-                        vista.mostrarListaPerguntas(lista);
-                        String codigo = vista.lerTexto("Código da pergunta a exportar: ");
-
-                        Pergunta pSel = null;
-                        for(Pergunta p : lista) {
-                            if(p.getCodigoAcesso().equalsIgnoreCase(codigo)) { pSel = p; break; }
-                        }
-
-                        if (pSel != null) {
-                            coms.enviar(new MsgObterRespostas(codigo));
-                            List<RespostaEstudante> respostas = (List<RespostaEstudante>) coms.receber();
-
-                            String ficheiro = "resultados_" + codigo + ".csv";
-                            ExportadorCSV.exportar(ficheiro, pSel, respostas);
-                            vista.mostrarMensagem("Ficheiro gerado: " + ficheiro);
+                    if (resp instanceof List) {
+                        List<Pergunta> lista = (List<Pergunta>) resp;
+                        if (lista.isEmpty()) {
+                            vista.mostrarErro("Não tem perguntas criadas.");
                         } else {
-                            vista.mostrarErro("Código inválido.");
+                            vista.mostrarListaPerguntas(lista);
+                            String codigo = vista.lerTexto("Código da pergunta a exportar: ");
+
+                            // CORREÇÃO AQUI: Pedir a pergunta COMPLETA ao servidor
+                            // A pergunta da lista 'lista' não tem opções, por isso pedimos de novo
+                            coms.enviar(new MsgObterPergunta(codigo)); // Usa MsgObterPergunta (singular)
+                            Object respPergunta = coms.receber();
+
+                            if (respPergunta instanceof Pergunta) {
+                                Pergunta pCompleta = (Pergunta) respPergunta;
+
+                                // Agora pede as respostas dos alunos
+                                coms.enviar(new MsgObterRespostas(codigo));
+                                Object respLista = coms.receber();
+
+                                if (respLista instanceof List) {
+                                    List<RespostaEstudante> respostas = (List<RespostaEstudante>) respLista;
+
+                                    String nomeFicheiro = "resultados_" + codigo + ".csv";
+                                    // Passa a pCompleta que já tem as opções carregadas!
+                                    ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
+                                    vista.mostrarMensagem("Ficheiro CSV gerado: " + nomeFicheiro);
+                                }
+                            } else {
+                                vista.mostrarErro("Pergunta não encontrada ou código inválido.");
+                            }
                         }
                     }
+                } catch (Exception e) {
+                    vista.mostrarErro("Erro na exportação: " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
             else if (op == 0) tipoUtilizador = 0;
