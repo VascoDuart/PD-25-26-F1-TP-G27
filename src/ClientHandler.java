@@ -2,6 +2,8 @@ import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class ClientHandler implements Runnable {
@@ -26,14 +28,9 @@ public class ClientHandler implements Runnable {
         this.dbManager = dbManager;
 
         System.out.println("[Handler] A inicializar streams para " + socket.getInetAddress());
-
-        // CORREÇÃO CRÍTICA: Flush obrigatório para enviar o cabeçalho
         this.out = new ObjectOutputStream(clientSocket.getOutputStream());
         this.out.flush();
-
         this.in = new ObjectInputStream(clientSocket.getInputStream());
-
-        System.out.println("[Handler] Streams criadas com sucesso.");
     }
 
     @Override
@@ -45,42 +42,55 @@ public class ClientHandler implements Runnable {
             while (estadoLogin == ESTADO_INICIAL) {
                 try {
                     Object msg = in.readObject();
-
-                    if (msg instanceof MsgRegisto) {
-                        processarRegisto((MsgRegisto) msg);
-                    } else if (msg instanceof MsgLogin) {
-                        processarLogin((MsgLogin) msg);
-                    } else {
-                        enviarObjeto("ERRO: Deve fazer login ou registo primeiro.");
-                    }
+                    if (msg instanceof MsgRegisto) processarRegisto((MsgRegisto) msg);
+                    else if (msg instanceof MsgLogin) processarLogin((MsgLogin) msg);
+                    else enviarObjeto("ERRO: Login/Registo necessário.");
                 } catch (SocketTimeoutException e) {
-                    enviarObjeto("TIMEOUT: Tempo de login esgotado.");
+                    enviarObjeto("TIMEOUT: Login expirou.");
                     return;
                 }
             }
 
             clientSocket.setSoTimeout(0);
-            System.out.println("[Handler] Cliente " + userEmail + " autenticado. Pronto.");
+            System.out.println("[Handler] Cliente " + userEmail + " autenticado.");
 
             // --- FASE 2: INTERAÇÃO ---
             while (true) {
-                Object msg = in.readObject(); // Fica aqui bloqueado à espera de pedidos
+                Object msg = in.readObject();
 
                 if (estadoLogin == ESTADO_DOCENTE) {
-                    if (msg instanceof MsgCriarPergunta) processarCriarPergunta((MsgCriarPergunta) msg);
+                    if (msg instanceof MsgCriarPergunta) {
+                        processarCriarPergunta((MsgCriarPergunta) msg);
+                    }
+                    // --- NOVAS FUNCIONALIDADES ---
+                    else if (msg instanceof MsgObterPerguntas) {
+                        List<Pergunta> lista = dbManager.obterPerguntasDoDocente(userId);
+                        enviarObjeto(lista);
+                    }
+                    else if (msg instanceof MsgObterRespostas) {
+                        String codigo = ((MsgObterRespostas) msg).getCodigoAcesso();
+                        // Verifica se existe (podia verificar também se pertence ao docente)
+                        Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
+                        if (p != null) {
+                            List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
+                            enviarObjeto(resps);
+                        } else {
+                            enviarObjeto(new ArrayList<RespostaEstudante>()); // Lista vazia
+                        }
+                    }
                 }
                 else if (estadoLogin == ESTADO_ESTUDANTE) {
-                    if (msg instanceof MsgObterPergunta) processarObterPergunta((MsgObterPergunta) msg);
-                    else if (msg instanceof MsgResponderPergunta) processarResponderPergunta((MsgResponderPergunta) msg);
+                    if (msg instanceof MsgObterPergunta) {
+                        processarObterPergunta((MsgObterPergunta) msg);
+                    } else if (msg instanceof MsgResponderPergunta) {
+                        processarResponderPergunta((MsgResponderPergunta) msg);
+                    }
                 }
             }
 
-        } catch (EOFException e) {
-            System.out.println("[Handler] Cliente desconectou-se (EOF).");
-        } catch (SocketException e) {
-            System.out.println("[Handler] Ligação perdida (SocketException).");
+        } catch (EOFException | SocketException e) {
+            System.out.println("[Handler] Cliente saiu: " + userEmail);
         } catch (Exception e) {
-            System.err.println("[Handler] Erro inesperado na thread: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try { clientSocket.close(); } catch (IOException e) {}
@@ -92,7 +102,13 @@ public class ClientHandler implements Runnable {
         out.flush();
     }
 
-    // --- LÓGICA DE NEGÓCIO ---
+    public void enviarNotificacao(String mensagem) {
+        try {
+            enviarObjeto("NOTIFICACAO:" + mensagem);
+        } catch (IOException e) {}
+    }
+
+    // --- PROCESSAMENTO ---
 
     private void processarRegisto(MsgRegisto msg) throws IOException {
         boolean sucesso = false;
@@ -105,9 +121,8 @@ public class ClientHandler implements Runnable {
         } else if (msg.isEstudante()) {
             sucesso = dbManager.registarEstudante(msg.getEstudante());
         }
-
-        if (sucesso) enviarObjeto("SUCESSO: Utilizador registado!");
-        else enviarObjeto("ERRO: Falha no registo (Email duplicado?).");
+        if (sucesso) enviarObjeto("SUCESSO: Registado!");
+        else enviarObjeto("ERRO: Dados inválidos ou duplicados.");
     }
 
     private void processarLogin(MsgLogin msg) throws IOException {
@@ -129,7 +144,7 @@ public class ClientHandler implements Runnable {
     private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String codAcesso = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         boolean sucesso = dbManager.criarPergunta(userId, msg.getEnunciado(), codAcesso, msg.getInicio(), msg.getFim(), msg.getOpcoes());
-        if (sucesso) enviarObjeto("SUCESSO: Pergunta criada. Código: " + codAcesso);
+        if (sucesso) enviarObjeto("SUCESSO: Criada. Código: " + codAcesso);
         else enviarObjeto("ERRO: Falha na BD.");
     }
 
@@ -140,7 +155,7 @@ public class ClientHandler implements Runnable {
 
     private void processarResponderPergunta(MsgResponderPergunta msg) throws IOException {
         boolean sucesso = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
-        if (sucesso) enviarObjeto("SUCESSO: Resposta submetida.");
-        else enviarObjeto("ERRO: Resposta rejeitada.");
+        if (sucesso) enviarObjeto("SUCESSO: Resposta guardada.");
+        else enviarObjeto("ERRO: Falha (já respondeste?).");
     }
 }

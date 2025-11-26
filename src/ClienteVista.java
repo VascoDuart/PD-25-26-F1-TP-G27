@@ -9,7 +9,6 @@ public class ClienteVista {
         this.scanner = new Scanner(System.in);
     }
 
-    // --- MÉTODOS DE SAÍDA ---
     public void mostrarMensagem(String msg) {
         System.out.println("[INFO] " + msg);
     }
@@ -22,7 +21,16 @@ public class ClienteVista {
         System.out.println("\n>>> NOTIFICAÇÃO: " + msg + " <<<\n> ");
     }
 
-    // --- MÉTODOS DE ENTRADA GENÉRICOS ---
+    // --- NOVO: Listagem para o menu de exportação ---
+    public void mostrarListaPerguntas(List<Pergunta> lista) {
+        System.out.println("\n--- As suas Perguntas ---");
+        for (Pergunta p : lista) {
+            System.out.println("- Código: " + p.getCodigoAcesso() +
+                    " | Enunciado: " + p.getEnunciado());
+        }
+        System.out.println("-------------------------");
+    }
+
     public String lerTexto(String prompt) {
         System.out.print(prompt);
         return scanner.nextLine().trim();
@@ -32,12 +40,9 @@ public class ClienteVista {
         try {
             System.out.print(prompt);
             return Integer.parseInt(scanner.nextLine().trim());
-        } catch (NumberFormatException e) {
-            return -1;
-        }
+        } catch (NumberFormatException e) { return -1; }
     }
 
-    // --- MENUS ---
     public int menuInicial() {
         System.out.println("\n=== BEM-VINDO ===");
         System.out.println("1. Login");
@@ -62,44 +67,31 @@ public class ClienteVista {
         return lerInteiro("Opção: ");
     }
 
-    // --- FORMULÁRIOS ---
     public MsgLogin formLogin() {
-        String email = lerTexto("Email: ");
-        String pass = lerTexto("Password: ");
-        return new MsgLogin(email, pass);
+        return new MsgLogin(lerTexto("Email: "), lerTexto("Password: "));
     }
 
     public MsgRegisto formRegistoDocente() {
         System.out.println("--- Novo Docente ---");
-        String nome = lerTexto("Nome: ");
-        String email = lerTexto("Email: ");
-        String pass = lerTexto("Password: ");
-        String codigo = lerTexto("Código Institucional: ");
-        return new MsgRegisto(new Docente(nome, email, pass), codigo);
+        return new MsgRegisto(new Docente(lerTexto("Nome: "), lerTexto("Email: "), lerTexto("Password: ")), lerTexto("Código Institucional: "));
     }
 
     public MsgRegisto formRegistoEstudante() {
         System.out.println("--- Novo Estudante ---");
-        String nome = lerTexto("Nome: ");
-        String email = lerTexto("Email: ");
-        String pass = lerTexto("Password: ");
-        String num = lerTexto("Nº Estudante: ");
-        return new MsgRegisto(new Estudante(num, nome, email, pass));
+        return new MsgRegisto(new Estudante(lerTexto("Nº Estudante: "), lerTexto("Nome: "), lerTexto("Email: "), lerTexto("Password: ")));
     }
 
     public MsgCriarPergunta formCriarPergunta() {
         String enunc = lerTexto("Enunciado: ");
-        String ini = lerTexto("Início (YYYY-MM-DD HH:mm): ");
-        String fim = lerTexto("Fim (YYYY-MM-DD HH:mm): ");
-
+        String ini = lerTexto("Início: ");
+        String fim = lerTexto("Fim: ");
         List<Opcao> opcoes = new ArrayList<>();
         char letra = 'a';
-        System.out.println("Insira as opções (Vazio para terminar):");
+        System.out.println("Opções (Vazio para terminar):");
         while (true) {
             String txt = lerTexto(letra + ") ");
             if (txt.isEmpty()) break;
-            String correta = lerTexto("É a correta? (s/n): ");
-            opcoes.add(new Opcao(String.valueOf(letra++), txt, correta.equalsIgnoreCase("s")));
+            opcoes.add(new Opcao(String.valueOf(letra++), txt, lerTexto("Correta? (s/n): ").equalsIgnoreCase("s")));
         }
         return new MsgCriarPergunta(-1, enunc, ini, fim, opcoes);
     }
