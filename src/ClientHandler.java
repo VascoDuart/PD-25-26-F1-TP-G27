@@ -20,10 +20,11 @@ public class ClientHandler implements Runnable {
     private final DatabaseManager dbManager;
     private final ObjectOutputStream out;
     private final ObjectInputStream in;
+    private final ServerAPI serverAPI;
 
     private static final int AUTH_TIMEOUT_MS = 30000;
 
-    public ClientHandler(Socket socket, DatabaseManager dbManager) throws IOException {
+    public ClientHandler(Socket socket, DatabaseManager dbManager, ServerAPI api) throws IOException {
         this.clientSocket = socket;
         this.dbManager = dbManager;
 
@@ -31,6 +32,7 @@ public class ClientHandler implements Runnable {
         this.out = new ObjectOutputStream(clientSocket.getOutputStream());
         this.out.flush();
         this.in = new ObjectInputStream(clientSocket.getInputStream());
+        this.serverAPI = api;
     }
 
     @Override
@@ -72,14 +74,20 @@ public class ClientHandler implements Runnable {
                         processarObterPergunta((MsgObterPergunta) msg);
                     }
                     // -------------------------------------------
+                    // Dentro do bloco else if (estadoLogin == ESTADO_DOCENTE)
                     else if (msg instanceof MsgObterRespostas) {
                         String codigo = ((MsgObterRespostas) msg).getCodigoAcesso();
-                        Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
-                        if (p != null) {
+
+                        // NOVO: Obter o ID do docente dono da pergunta
+                        int donoID = dbManager.obterDocenteIDDaPergunta(codigo); // Mudar esta chamada no DBManager
+
+                        if (donoID == userId) {
+                            // Apenas se for o dono
                             List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
                             enviarObjeto(resps);
                         } else {
-                            enviarObjeto(new ArrayList<RespostaEstudante>());
+                            // Se não for o dono, ou a pergunta não existir (donoID = -1)
+                            enviarObjeto("ERRO: Pergunta não encontrada ou não pertence a este Docente.");
                         }
                     }
                 }
@@ -106,10 +114,17 @@ public class ClientHandler implements Runnable {
         out.flush();
     }
 
-    public void enviarNotificacao(String mensagem) {
+    public String getUserEmail() {
+        return userEmail; // Assumindo que userEmail é o campo de estado
+    }
+
+    public boolean enviarNotificacao(String mensagem) {
         try {
             enviarObjeto("NOTIFICACAO:" + mensagem);
-        } catch (IOException e) {}
+            return true;
+        } catch (IOException e) {
+            return false; // Falha ao enviar, indica que a conexão caiu
+        }
     }
 
     // --- PROCESSAMENTO ---
@@ -121,9 +136,9 @@ public class ClientHandler implements Runnable {
                 enviarObjeto("ERRO: Código de docente inválido.");
                 return;
             }
-            sucesso = dbManager.registarDocente(msg.getDocente());
+            sucesso = Boolean.parseBoolean(dbManager.registarDocente(msg.getDocente()));
         } else if (msg.isEstudante()) {
-            sucesso = dbManager.registarEstudante(msg.getEstudante());
+            sucesso = Boolean.parseBoolean(dbManager.registarEstudante(msg.getEstudante()));
         }
         if (sucesso) enviarObjeto("SUCESSO: Registado!");
         else enviarObjeto("ERRO: Dados inválidos ou duplicados.");
@@ -147,9 +162,23 @@ public class ClientHandler implements Runnable {
 
     private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String codAcesso = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        boolean sucesso = dbManager.criarPergunta(userId, msg.getEnunciado(), codAcesso, msg.getInicio(), msg.getFim(), msg.getOpcoes());
-        if (sucesso) enviarObjeto("SUCESSO: Criada. Código: " + codAcesso);
-        else enviarObjeto("ERRO: Falha na BD.");
+
+        // Assumindo que dbManager.criarPergunta agora retorna a Query SQL executada
+        String querySql = dbManager.criarPergunta(userId, msg.getEnunciado(), codAcesso, msg.getInicio(), msg.getFim(), msg.getOpcoes());
+
+        if (querySql != null) {
+            // Obter a versão ATUALIZADA da BD (deve ser a nova versão)
+            int novaVersao = dbManager.getVersaoBD();
+
+            // 1. DISPARAR HEARTBEAT DE ESCRITA para Backups
+            serverAPI.publicarAlteracao(querySql, novaVersao);
+
+            // 2. DISPARAR NOTIFICAÇÃO para Outros Clientes
+            serverAPI.notificarTodosClientes("Nova pergunta criada: " + codAcesso);
+
+            enviarObjeto("SUCESSO: Criada. Código: " + codAcesso);
+        }
+        // ...
     }
 
     private void processarObterPergunta(MsgObterPergunta msg) throws IOException {
@@ -158,7 +187,7 @@ public class ClientHandler implements Runnable {
     }
 
     private void processarResponderPergunta(MsgResponderPergunta msg) throws IOException {
-        boolean sucesso = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
+        boolean sucesso = Boolean.parseBoolean(dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao()));
         if (sucesso) enviarObjeto("SUCESSO: Resposta guardada.");
         else enviarObjeto("ERRO: Falha (já respondeste?).");
     }
