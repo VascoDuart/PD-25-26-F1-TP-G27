@@ -34,7 +34,8 @@ public class Pergunta implements Serializable {
     public String getEnunciado() { return enunciado; }
     public List<Opcao> getOpcoes() { return opcoes; }
     public String getCodigoAcesso() { return codigoAcesso; }
-
+    public String getInicio() { return dataInicio; }
+    public String getFim() { return dataFim; }
     public void setCodigoAcesso(String codigo) { this.codigoAcesso = codigo; }
     public void setId(int id) { this.id = id; }
 
