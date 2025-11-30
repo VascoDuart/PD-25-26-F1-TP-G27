@@ -4,7 +4,6 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class DatabaseManager {
 
@@ -16,14 +15,9 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 1. SEGURANÇA E UTILITÁRIOS (Sem Alterações)
+    // 1. SEGURANÇA E UTILITÁRIOS
     // ==================================================================================
 
-    /**
-     * Gera o Hash SHA-256 de uma string (password ou código de docente).
-     * @param password A string original em texto limpo.
-     * @return A string codificada em Base64 do hash.
-     */
     private String hashPassword(String password) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -34,9 +28,6 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * Valida se o código introduzido no registo de docente corresponde ao hash guardado na BD.
-     */
     public boolean validarCodigoDocente(String codigoFornecido) {
         String sql = "SELECT codigo_docente_hash FROM Configuracao WHERE id = 1";
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
@@ -51,7 +42,7 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 2. CONFIGURAÇÃO E LIGAÇÃO (Adicionado Getter da Conexão)
+    // 2. CONFIGURAÇÃO E LIGAÇÃO
     // ==================================================================================
 
     public void conectar() throws SQLException {
@@ -64,7 +55,6 @@ public class DatabaseManager {
         String url = "jdbc:sqlite:" + this.dbPath;
         this.conn = DriverManager.getConnection(url);
 
-        // Ativa chaves estrangeiras (Foreign Keys) no SQLite
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON;");
         }
@@ -83,11 +73,10 @@ public class DatabaseManager {
     }
 
     public Connection getConnection() {
-        return this.conn; // Essencial para a transferência de ficheiros BD
+        return this.conn;
     }
 
     public void criarTabelas() throws SQLException {
-        // Tabela de Configuração (Versão da BD e Código de Segurança)
         String sqlConfig = "CREATE TABLE IF NOT EXISTS Configuracao (" +
                 "id INTEGER PRIMARY KEY CHECK (id = 1), " +
                 "versao INTEGER NOT NULL DEFAULT 0, " +
@@ -148,7 +137,6 @@ public class DatabaseManager {
             stmt.execute(sqlOpcao);
             stmt.execute(sqlResposta);
 
-            // Configuração Inicial: Define o código "DOCENTE2025" se a tabela estiver vazia
             String codigoHash = hashPassword("DOCENTE2025");
             String sqlInitConfig = "INSERT OR IGNORE INTO Configuracao (id, versao, codigo_docente_hash) VALUES (1, 0, '" + codigoHash + "');";
             stmt.execute(sqlInitConfig);
@@ -157,16 +145,11 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * Incrementa a versão da base de dados e devolve o novo número de versão.
-     * Deve ser chamado após qualquer operação de escrita (INSERT/UPDATE/DELETE).
-     * @return O novo número de versão.
-     */
     private int incrementarVersao() {
         String sql = "UPDATE Configuracao SET versao = versao + 1 WHERE id = 1";
         try (Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(sql);
-            return getVersaoBD(); // Obter e devolver a nova versão
+            return getVersaoBD();
         } catch (SQLException e) {
             System.err.println("[BD] Erro crítico: Falha ao incrementar versão da BD: " + e.getMessage());
             return -1;
@@ -174,12 +157,9 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 3. GESTÃO DE UTILIZADORES (Retorna Query SQL para Heartbeat)
+    // 3. GESTÃO DE UTILIZADORES
     // ==================================================================================
 
-    /**
-     * @return A Query SQL completa executada (para replicação), ou null em caso de erro.
-     */
     public synchronized String registarDocente(Docente d) {
         String sql = "INSERT INTO Docente(nome, email, password) VALUES(?,?,?)";
         String passHash = hashPassword(d.getPassword());
@@ -193,7 +173,6 @@ public class DatabaseManager {
             incrementarVersao();
             System.out.println("[BD] Docente registado: " + d.getEmail());
 
-            // Devolve a query SQL que o Servidor Principal deve enviar aos Backups
             return String.format("INSERT INTO Docente(nome, email, password) VALUES('%s','%s','%s')",
                     d.getNome(), d.getEmail(), passHash);
 
@@ -203,9 +182,6 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * @return A Query SQL completa executada (para replicação), ou null em caso de erro.
-     */
     public synchronized String registarEstudante(Estudante e) {
         String sql = "INSERT INTO Estudante(numero_estudante, nome, email, password) VALUES(?,?,?,?)";
         String passHash = hashPassword(e.getPassword());
@@ -220,7 +196,6 @@ public class DatabaseManager {
             incrementarVersao();
             System.out.println("[BD] Estudante registado: " + e.getEmail());
 
-            // Devolve a query SQL que o Servidor Principal deve enviar aos Backups
             return String.format("INSERT INTO Estudante(numero_estudante, nome, email, password) VALUES('%s','%s','%s','%s')",
                     e.getNumEstudante(), e.getNome(), e.getEmail(), passHash);
 
@@ -279,21 +254,17 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 4. GESTÃO DE PERGUNTAS (Retorna Query SQL para Heartbeat)
+    // 4. GESTÃO DE PERGUNTAS
     // ==================================================================================
 
-    /**
-     * @return A Query SQL completa executada (para replicação), ou null em caso de erro.
-     */
     public synchronized String criarPergunta(int docenteId, String enunciado, String codAcesso, String inicio, String fim, List<Opcao> opcoes) {
         if (opcoes == null || opcoes.size() < 2) return null;
 
         String queryResultante = null;
 
         try {
-            conn.setAutoCommit(false); // Início da Transação
+            conn.setAutoCommit(false);
 
-            // 1. Inserir Pergunta
             String sqlP = "INSERT INTO Pergunta(docente_id, enunciado, codigo_acesso, inicio, fim) VALUES(?,?,?,?,?)";
             try (PreparedStatement pstmtP = conn.prepareStatement(sqlP, Statement.RETURN_GENERATED_KEYS)) {
                 pstmtP.setInt(1, docenteId);
@@ -307,7 +278,6 @@ public class DatabaseManager {
                     if (rs.next()) {
                         int perguntaId = rs.getInt(1);
 
-                        // 2. Inserir Opções (e construir a query de replicação)
                         StringBuilder sqlOpcoes = new StringBuilder();
                         String sqlO = "INSERT INTO Opcao(pergunta_id, letra_opcao, texto_opcao, opcao_correta) VALUES(?,?,?,?)";
                         try (PreparedStatement pstmtO = conn.prepareStatement(sqlO)) {
@@ -324,7 +294,6 @@ public class DatabaseManager {
                             pstmtO.executeBatch();
                         }
 
-                        // Query para replicação: uma transação de queries
                         queryResultante = String.format("INSERT INTO Pergunta(id, docente_id, enunciado, codigo_acesso, inicio, fim) VALUES(%d,%d,'%s','%s','%s','%s');%s",
                                 perguntaId, docenteId, enunciado, codAcesso, inicio, fim, sqlOpcoes.toString());
                     } else {
@@ -334,7 +303,6 @@ public class DatabaseManager {
                 }
             }
 
-            // Sucesso: Commit e Incremento de Versão
             incrementarVersao();
             conn.commit();
 
@@ -362,7 +330,6 @@ public class DatabaseManager {
                 String ini = rs.getString("inicio");
                 String fim = rs.getString("fim");
 
-                // Buscar opções (Nota: isCorreta é 'false' para estudantes)
                 List<Opcao> opcoes = obterOpcoes(pId);
                 return new Pergunta(pId, enunc, codigo, ini, fim, opcoes);
             }
@@ -374,14 +341,12 @@ public class DatabaseManager {
 
     private List<Opcao> obterOpcoes(int perguntaId) throws SQLException {
         List<Opcao> lista = new ArrayList<>();
-        // Também seleciona opcao_correta. O cliente/handler decide se a envia ou não.
         String sql = "SELECT letra_opcao, texto_opcao, opcao_correta FROM Opcao WHERE pergunta_id = ? ORDER BY letra_opcao";
 
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, perguntaId);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
-                // Opção é carregada com o valor real de 'correta'
                 lista.add(new Opcao(rs.getString("letra_opcao"), rs.getString("texto_opcao"), rs.getBoolean("opcao_correta")));
             }
         }
@@ -389,19 +354,15 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 5. GESTÃO DE RESPOSTAS (Retorna Query SQL para Heartbeat)
+    // 5. GESTÃO DE RESPOSTAS
     // ==================================================================================
 
-    /**
-     * @return A Query SQL completa executada (para replicação), ou null em caso de erro.
-     */
     public synchronized String registarResposta(int estudanteId, String codigoAcesso, String letra) {
         String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
         String sqlInsert = "INSERT INTO Resposta(estudante_id, pergunta_id, opcao_escolhida, data_hora) VALUES(?,?,?,?)";
         String dataHora = java.time.LocalDateTime.now().toString();
 
         try {
-            // 1. Obter ID da Pergunta
             int perguntaId = -1;
             try (PreparedStatement ps1 = conn.prepareStatement(sqlId)) {
                 ps1.setString(1, codigoAcesso);
@@ -410,7 +371,6 @@ public class DatabaseManager {
             }
             if (perguntaId == -1) return null;
 
-            // 2. Inserir Resposta
             try (PreparedStatement ps2 = conn.prepareStatement(sqlInsert)) {
                 ps2.setInt(1, estudanteId);
                 ps2.setInt(2, perguntaId);
@@ -421,10 +381,8 @@ public class DatabaseManager {
                 incrementarVersao();
                 System.out.println("[BD] Resposta registada. Aluno ID: " + estudanteId);
 
-                // Devolve a query SQL para replicação
                 return String.format("INSERT INTO Resposta(estudante_id, pergunta_id, opcao_escolhida, data_hora) VALUES(%d,%d,'%s','%s')",
                         estudanteId, perguntaId, letra, dataHora);
-
             }
         } catch (SQLException e) {
             System.err.println("[BD] Erro ao registar resposta (duplicada?): " + e.getMessage());
@@ -433,25 +391,16 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 6. GESTÃO DO CLUSTER E REPLICAÇÃO (NOVAS FUNÇÕES)
+    // 6. GESTÃO DO CLUSTER E REPLICAÇÃO
     // ==================================================================================
 
-    /**
-     * Executa uma query SQL bruta. Usado pelo Servidor de Backup para replicação.
-     * @throws SQLException Se a query falhar, o servidor deve terminar (perda de sincronização).
-     */
     public synchronized void executarQueryReplica(String querySQL) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(querySQL);
-            // NOTA: A versão da BD NÃO é incrementada aqui, pois a versão correta é a do Principal.
             System.out.println("[BD Backup] Query de replicação executada.");
         }
     }
 
-    /**
-     * Obtém a versão atual da base de dados.
-     * Usado pelo Servidor para construir o MsgHeartbeat e para validação de sincronização.
-     */
     public int getVersaoBD() {
         String sql = "SELECT versao FROM Configuracao WHERE id = 1";
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
@@ -462,10 +411,6 @@ public class DatabaseManager {
         return -1;
     }
 
-    /**
-     * Obtém o ID do docente que criou a pergunta.
-     * Usado pelo ClientHandler para validar a propriedade (segurança/autorização).
-     */
     public int obterDocenteIDDaPergunta(String codigoAcesso) {
         String sql = "SELECT docente_id FROM Pergunta WHERE codigo_acesso = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -479,7 +424,7 @@ public class DatabaseManager {
     }
 
     // ==================================================================================
-    // 7. RELATÓRIOS E LISTAGENS (Manutenção)
+    // 7. RELATÓRIOS E LISTAGENS
     // ==================================================================================
 
     public List<Pergunta> obterPerguntasDoDocente(int docenteId) {
@@ -496,8 +441,6 @@ public class DatabaseManager {
                 String cod = rs.getString("codigo_acesso");
                 String ini = rs.getString("inicio");
                 String fim = rs.getString("fim");
-
-                // Retorna a pergunta sem opções (para listagem leve)
                 lista.add(new Pergunta(pId, enunc, cod, ini, fim, new ArrayList<>()));
             }
         } catch (SQLException e) {
@@ -508,8 +451,6 @@ public class DatabaseManager {
 
     public List<RespostaEstudante> obterRespostasDaPergunta(String codigoAcesso) {
         List<RespostaEstudante> lista = new ArrayList<>();
-
-        // 1. Obter ID da Pergunta
         String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
         int perguntaId = -1;
         try (PreparedStatement ps = conn.prepareStatement(sqlId)) {
@@ -520,16 +461,12 @@ public class DatabaseManager {
 
         if (perguntaId == -1) return lista;
 
-        // 2. Query com JOIN (Resposta + Estudante)
         String sql = "SELECT e.numero_estudante, e.nome, e.email, r.opcao_escolhida " +
-                "FROM Resposta r " +
-                "JOIN Estudante e ON r.estudante_id = e.id " +
-                "WHERE r.pergunta_id = ?";
+                "FROM Resposta r JOIN Estudante e ON r.estudante_id = e.id WHERE r.pergunta_id = ?";
 
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, perguntaId);
             ResultSet rs = pstmt.executeQuery();
-
             while (rs.next()) {
                 lista.add(new RespostaEstudante(
                         rs.getString("numero_estudante"),
@@ -542,5 +479,79 @@ public class DatabaseManager {
             System.err.println("[BD] Erro ao obter respostas para CSV: " + e.getMessage());
         }
         return lista;
+    }
+
+    // ==================================================================================
+    // 8. EDIÇÃO E ELIMINAÇÃO (MÉTODOS NOVOS ADICIONADOS)
+    // ==================================================================================
+
+    /**
+     * Verifica se uma pergunta pode ser alterada.
+     * Regras:
+     * 1. A pergunta tem de existir e pertencer ao docenteId fornecido.
+     * 2. A pergunta NÃO pode ter respostas associadas.
+     */
+    public boolean podeAlterarPergunta(String codigo, int docenteId) {
+        // Query otimizada: verifica propriedade e conta respostas num só passo
+        String sql = "SELECT p.id, (SELECT COUNT(*) FROM Resposta r WHERE r.pergunta_id = p.id) as total_respostas " +
+                "FROM Pergunta p WHERE p.codigo_acesso = ? AND p.docente_id = ?";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, codigo);
+            ps.setInt(2, docenteId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                int totalRespostas = rs.getInt("total_respostas");
+                // Retorna TRUE apenas se o total de respostas for 0
+                return totalRespostas == 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro na verificação de permissões: " + e.getMessage());
+        }
+        // Retorna FALSE se a pergunta não for encontrada, não pertencer ao docente ou tiver respostas
+        return false;
+    }
+
+    public synchronized String eliminarPergunta(String codigo) {
+        String sql = "DELETE FROM Pergunta WHERE codigo_acesso = ?";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, codigo);
+            int rows = ps.executeUpdate();
+
+            if (rows > 0) {
+                incrementarVersao(); // Importante para o Heartbeat
+                System.out.println("[BD] Pergunta eliminada: " + codigo);
+                // Retorna a query SQL exata para os servidores de backup replicarem
+                return "DELETE FROM Pergunta WHERE codigo_acesso = '" + codigo + "'";
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao eliminar pergunta: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public synchronized String editarPergunta(String codigo, String enunciado, String inicio, String fim) {
+        String sql = "UPDATE Pergunta SET enunciado=?, inicio=?, fim=? WHERE codigo_acesso=?";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, enunciado);
+            ps.setString(2, inicio);
+            ps.setString(3, fim);
+            ps.setString(4, codigo);
+            int rows = ps.executeUpdate();
+
+            if (rows > 0) {
+                incrementarVersao(); // Importante para o Heartbeat
+                System.out.println("[BD] Pergunta editada: " + codigo);
+                // Retorna a query SQL exata para os servidores de backup replicarem
+                return String.format("UPDATE Pergunta SET enunciado='%s', inicio='%s', fim='%s' WHERE codigo_acesso='%s'",
+                        enunciado, inicio, fim, codigo);
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao editar pergunta: " + e.getMessage());
+        }
+        return null;
     }
 }

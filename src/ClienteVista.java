@@ -21,7 +21,6 @@ public class ClienteVista {
         System.out.println("\n>>> NOTIFICAÇÃO: " + msg + " <<<\n> ");
     }
 
-    // --- NOVO: Listagem para o menu de exportação ---
     public void mostrarListaPerguntas(List<Pergunta> lista) {
         System.out.println("\n--- As suas Perguntas ---");
         for (Pergunta p : lista) {
@@ -56,6 +55,8 @@ public class ClienteVista {
         System.out.println("\n=== DOCENTE ===");
         System.out.println("1. Criar Pergunta");
         System.out.println("2. Exportar Resultados (CSV)");
+        System.out.println("3. Editar Pergunta");   // NOVO
+        System.out.println("4. Eliminar Pergunta"); // NOVO
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }
@@ -83,8 +84,8 @@ public class ClienteVista {
 
     public MsgCriarPergunta formCriarPergunta() {
         String enunc = lerTexto("Enunciado: ");
-        String ini = lerTexto("Início: ");
-        String fim = lerTexto("Fim: ");
+        String ini = lerTexto("Início (YYYY-MM-DD HH:MM): ");
+        String fim = lerTexto("Fim (YYYY-MM-DD HH:MM): ");
         List<Opcao> opcoes = new ArrayList<>();
         char letra = 'a';
         System.out.println("Opções (Vazio para terminar):");

@@ -84,14 +84,12 @@ public class Cliente {
     private static void tratarMenuDocente() {
         int op = vista.menuDocente();
         try {
-            if (op == 1) {
+            if (op == 1) { // CRIAR
                 coms.enviar(vista.formCriarPergunta());
                 vista.mostrarMensagem((String) coms.receber());
             }
-            // --- NOVO: EXPORTAR CSV ---
-            else if (op == 2) { // Exportar Resultados (CSV)
+            else if (op == 2) { // EXPORTAR CSV
                 try {
-                    // 1. Listar perguntas (Resumidas)
                     coms.enviar(new MsgObterPerguntas());
                     Object resp = coms.receber();
 
@@ -103,23 +101,17 @@ public class Cliente {
                             vista.mostrarListaPerguntas(lista);
                             String codigo = vista.lerTexto("Código da pergunta a exportar: ");
 
-                            // CORREÇÃO AQUI: Pedir a pergunta COMPLETA ao servidor
-                            // A pergunta da lista 'lista' não tem opções, por isso pedimos de novo
-                            coms.enviar(new MsgObterPergunta(codigo)); // Usa MsgObterPergunta (singular)
+                            coms.enviar(new MsgObterPergunta(codigo));
                             Object respPergunta = coms.receber();
 
                             if (respPergunta instanceof Pergunta) {
                                 Pergunta pCompleta = (Pergunta) respPergunta;
-
-                                // Agora pede as respostas dos alunos
                                 coms.enviar(new MsgObterRespostas(codigo));
                                 Object respLista = coms.receber();
 
                                 if (respLista instanceof List) {
                                     List<RespostaEstudante> respostas = (List<RespostaEstudante>) respLista;
-
                                     String nomeFicheiro = "resultados_" + codigo + ".csv";
-                                    // Passa a pCompleta que já tem as opções carregadas!
                                     ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
                                     vista.mostrarMensagem("Ficheiro CSV gerado: " + nomeFicheiro);
                                 }
@@ -131,6 +123,22 @@ public class Cliente {
                 } catch (Exception e) {
                     vista.mostrarErro("Erro na exportação: " + e.getMessage());
                     e.printStackTrace();
+                }
+            }
+            else if (op == 3) { // EDITAR
+                String codigo = vista.lerTexto("Código da pergunta a editar: ");
+                String enunc = vista.lerTexto("Novo Enunciado: ");
+                String ini = vista.lerTexto("Novo Início (YYYY-MM-DD HH:MM): ");
+                String fim = vista.lerTexto("Novo Fim (YYYY-MM-DD HH:MM): ");
+
+                coms.enviar(new MsgEditarPergunta(codigo, enunc, ini, fim));
+                vista.mostrarMensagem((String) coms.receber());
+            }
+            else if (op == 4) { // ELIMINAR
+                String codigo = vista.lerTexto("Código da pergunta a eliminar: ");
+                if (vista.lerTexto("Tem a certeza? (s/n): ").equalsIgnoreCase("s")) {
+                    coms.enviar(new MsgEliminarPergunta(codigo));
+                    vista.mostrarMensagem((String) coms.receber());
                 }
             }
             else if (op == 0) tipoUtilizador = 0;

@@ -19,7 +19,7 @@ public class ClientHandler implements Runnable {
 
     private final Socket clientSocket;
     private final DatabaseManager dbManager;
-    private final ServerAPI serverAPI; // Referência injetada
+    private final ServerAPI serverAPI;
     private final ObjectOutputStream out;
     private final ObjectInputStream in;
 
@@ -28,7 +28,7 @@ public class ClientHandler implements Runnable {
     public ClientHandler(Socket socket, DatabaseManager dbManager, ServerAPI api) throws IOException {
         this.clientSocket = socket;
         this.dbManager = dbManager;
-        this.serverAPI = api; // O ServerAPI é o próprio Servidor
+        this.serverAPI = api;
 
         System.out.println("[Handler] A inicializar streams para " + socket.getInetAddress());
         this.out = new ObjectOutputStream(clientSocket.getOutputStream());
@@ -75,6 +75,13 @@ public class ClientHandler implements Runnable {
                     else if (msg instanceof MsgObterRespostas) {
                         processarObterRespostas((MsgObterRespostas) msg);
                     }
+                    // --- NOVOS CASOS DE USO ---
+                    else if (msg instanceof MsgEliminarPergunta) {
+                        processarEliminarPergunta((MsgEliminarPergunta) msg);
+                    }
+                    else if (msg instanceof MsgEditarPergunta) {
+                        processarEditarPergunta((MsgEditarPergunta) msg);
+                    }
                 }
                 else if (estadoLogin == ESTADO_ESTUDANTE) {
                     if (msg instanceof MsgObterPergunta) {
@@ -114,12 +121,11 @@ public class ClientHandler implements Runnable {
         return userEmail;
     }
 
-    // --- PROCESSAMENTO DE MENSAGENS DE INFRAESTRUTURA/NEGÓCIO ---
+    // --- PROCESSAMENTO DE MENSAGENS ---
 
     private void processarRegisto(MsgRegisto msg) throws IOException {
         String resposta = "ERRO: Falha no registo.";
 
-        // NOVO: Bloco de Escrita Sincronizado para registo
         synchronized (serverAPI.getBDLock()) {
             if (msg.isDocente()) {
                 if (!dbManager.validarCodigoDocente(msg.getCodigoDocente())) {
@@ -147,7 +153,6 @@ public class ClientHandler implements Runnable {
     }
 
     private void processarLogin(MsgLogin msg) throws IOException {
-        // Autenticação não é operação de escrita, não precisa de lock.
         if (dbManager.autenticarDocente(msg.getEmail(), msg.getPassword())) {
             estadoLogin = ESTADO_DOCENTE;
             userEmail = msg.getEmail();
@@ -168,7 +173,6 @@ public class ClientHandler implements Runnable {
     private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String resposta = "ERRO: Falha na BD.";
 
-        // NOVO: Bloco de Escrita Sincronizado para criar pergunta
         synchronized (serverAPI.getBDLock()) {
             String codAcesso = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
@@ -176,9 +180,7 @@ public class ClientHandler implements Runnable {
 
             if (querySql != null) {
                 resposta = "SUCESSO: Criada. Código: " + codAcesso;
-                // 1. PUBLICAR HEARTBEAT
                 serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
-                // 2. NOTIFICAR CLIENTES de novo estado
                 serverAPI.notificarTodosClientes("Nova pergunta disponivel: " + codAcesso);
             }
         }
@@ -188,13 +190,10 @@ public class ClientHandler implements Runnable {
     private void processarObterPergunta(MsgObterPergunta msg) throws IOException {
         Pergunta p = dbManager.obterPerguntaPorCodigo(msg.getCodigoAcesso());
 
-        // Se for estudante, filtrar a opção correta para não revelar a resposta (segurança)
         if (estadoLogin == ESTADO_ESTUDANTE && p != null) {
             List<Opcao> opcoesFiltradas = p.getOpcoes().stream()
-                    .map(o -> new Opcao(o.getLetra(), o.getTexto(), false)) // Força 'correta' a false
+                    .map(o -> new Opcao(o.getLetra(), o.getTexto(), false))
                     .collect(Collectors.toList());
-            // Nota: Se a classe Pergunta tiver um setter para List<Opcao>, usá-lo-ia aqui
-            // Como não tem, o cliente deve ser informado para desconsiderar a resposta correta para a vista.
         }
         enviarObjeto(p);
     }
@@ -202,9 +201,7 @@ public class ClientHandler implements Runnable {
     private void processarResponderPergunta(MsgResponderPergunta msg) throws IOException {
         String resposta = "ERRO: Falha (já respondeste ou pergunta invalida?).";
 
-        // NOVO: Bloco de Escrita Sincronizado para registar resposta
         synchronized (serverAPI.getBDLock()) {
-            // Verifica se o estudanteId é o userId atual
             String querySql = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
 
             if (querySql != null) {
@@ -217,31 +214,62 @@ public class ClientHandler implements Runnable {
 
     private void processarObterRespostas(MsgObterRespostas msg) throws IOException {
         String codigo = msg.getCodigoAcesso();
-
-        // 1. Validação de Autorização: Apenas o dono pode ver o relatório
         int donoID = dbManager.obterDocenteIDDaPergunta(codigo);
 
         if (donoID == userId) {
             Pergunta pCompleta = dbManager.obterPerguntaPorCodigo(codigo);
 
             if (pCompleta != null) {
-                // 2. Obter respostas dos alunos (para CSV)
                 List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
-
-                // NOTA: Para este fluxo (CSV), o Cliente precisa de PCompleta e Respostas.
-                // Aqui seria necessário enviar um objeto wrapper que contenha a Pergunta e a Lista.
-
-                // Opção 1: Se o cliente aceitar List<Object>
                 List<Object> resultado = new ArrayList<>();
                 resultado.add(pCompleta);
                 resultado.add(resps);
                 enviarObjeto(resultado);
-
             } else {
                 enviarObjeto(new ArrayList<Object>());
             }
         } else {
             enviarObjeto("ERRO: Pergunta não encontrada ou não pertence a este Docente.");
         }
+    }
+
+    // --- NOVOS MÉTODOS DE PROCESSAMENTO (EDITAR/ELIMINAR) ---
+
+    private void processarEliminarPergunta(MsgEliminarPergunta msg) throws IOException {
+        String resposta = "ERRO: Não foi possível eliminar (verifique se tem respostas ou permissões).";
+
+        synchronized (serverAPI.getBDLock()) {
+            if (dbManager.podeAlterarPergunta(msg.getCodigoAcesso(), userId)) {
+                String querySql = dbManager.eliminarPergunta(msg.getCodigoAcesso());
+
+                if (querySql != null) {
+                    resposta = "SUCESSO: Pergunta eliminada.";
+                    serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+                    serverAPI.notificarTodosClientes("Pergunta removida: " + msg.getCodigoAcesso());
+                }
+            }
+        }
+        enviarObjeto(resposta);
+    }
+
+    private void processarEditarPergunta(MsgEditarPergunta msg) throws IOException {
+        String resposta = "ERRO: Não foi possível editar (verifique se tem respostas ou permissões).";
+
+        synchronized (serverAPI.getBDLock()) {
+            if (dbManager.podeAlterarPergunta(msg.getCodigoAcesso(), userId)) {
+                String querySql = dbManager.editarPergunta(
+                        msg.getCodigoAcesso(),
+                        msg.getNovoEnunciado(),
+                        msg.getNovoInicio(),
+                        msg.getNovoFim()
+                );
+
+                if (querySql != null) {
+                    resposta = "SUCESSO: Pergunta editada.";
+                    serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+                }
+            }
+        }
+        enviarObjeto(resposta);
     }
 }
