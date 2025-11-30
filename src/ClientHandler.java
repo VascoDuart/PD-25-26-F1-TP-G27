@@ -214,22 +214,30 @@ public class ClientHandler implements Runnable {
 
     private void processarObterRespostas(MsgObterRespostas msg) throws IOException {
         String codigo = msg.getCodigoAcesso();
+
+        // 1. Validação de Autorização
         int donoID = dbManager.obterDocenteIDDaPergunta(codigo);
 
         if (donoID == userId) {
-            Pergunta pCompleta = dbManager.obterPerguntaPorCodigo(codigo);
+            // Verifica se a pergunta existe
+            Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
 
-            if (pCompleta != null) {
+            if (p != null) {
+                // 2. Obter APENAS a lista de respostas
                 List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
-                List<Object> resultado = new ArrayList<>();
-                resultado.add(pCompleta);
-                resultado.add(resps);
-                enviarObjeto(resultado);
+
+                // CORREÇÃO: Enviar diretamente a lista de respostas (sem envolver num array de objetos)
+                // O Cliente já tem a pergunta do passo anterior.
+                enviarObjeto(resps);
+
             } else {
-                enviarObjeto(new ArrayList<Object>());
+                // Envia lista vazia se não encontrar
+                enviarObjeto(new ArrayList<RespostaEstudante>());
             }
         } else {
-            enviarObjeto("ERRO: Pergunta não encontrada ou não pertence a este Docente.");
+            // Se não for o dono, envia lista vazia (ou podia enviar mensagem de erro)
+            // Mantemos lista vazia para evitar erro de cast no cliente
+            enviarObjeto(new ArrayList<RespostaEstudante>());
         }
     }
 
