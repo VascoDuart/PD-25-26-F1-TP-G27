@@ -22,6 +22,7 @@ public class Servidor implements ServerAPI {
     private DatabaseManager db;
     private HeartbeatSender heartbeatSender;
     private final List<ClientHandler> clientesConectados = Collections.synchronizedList(new ArrayList<>());
+    private final Object BD_LOCK = new Object();
 
     private boolean isPrincipal = false;
 
@@ -80,7 +81,7 @@ public class Servidor implements ServerAPI {
                     aceitarClientes();  // Aceita Clientes
                 } else {
                     System.out.println("[Servidor] >>> MODO BACKUP <<<");
-                    // Lógica para obter cópia inicial da BD e aguardar pedidos TCP (próximo passo)
+                    receberCopiaBD(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
                 }
 
                 // Loop para manter a main thread viva
@@ -139,6 +140,10 @@ public class Servidor implements ServerAPI {
         }).start();
     }
 
+    public Object getBDLock() {
+        return BD_LOCK;
+    }
+
     // --- THREAD DE ACEITAÇÃO DE PEDIDOS DE BD (TCP) ---
     private void aceitarPedidosBD() {
         new Thread(() -> {
@@ -146,18 +151,49 @@ public class Servidor implements ServerAPI {
             while (true) {
                 try {
                     Socket s = srvSocketDB.accept();
-                    System.out.println("[BD Accept] Recebido pedido de cópia da BD de: " + s.getInetAddress());
-                    // ----------------------------------------------------
-                    // Lógica para enviar o ficheiro SQLite via TCP/Streams
-                    // (Implementação complexa que lida com Ficheiros/Streams)
-                    // ----------------------------------------------------
+
+                    synchronized (BD_LOCK) {
+                        System.out.println("[BD Accept] BLOQUEIO DE ESCRITA ATIVO. Enviando BD.");
+                        File dbFile = new File(dbPath);
+
+                        try (FileInputStream fis = new FileInputStream(dbFile);
+                             OutputStream os = s.getOutputStream()) {
+
+                            byte[] buffer = new byte[8192];
+                            int bytesRead;
+                            while ((bytesRead = fis.read(buffer)) != -1) {
+                                os.write(buffer, 0, bytesRead);
+                            }
+                            os.flush();
+                            System.out.println("[BD Accept] BD enviada com sucesso.");
+                        }
+                    }
                     s.close();
                 } catch (IOException e) {
-                    System.err.println("[BD Accept] Erro no ServerSocket de BD: " + e.getMessage());
+                    System.err.println("[BD Accept] Erro fatal no ServerSocket BD: " + e.getMessage());
                     break;
                 }
             }
         }).start();
+    }
+
+    private void receberCopiaBD(InetAddress ipPrincipal, int portoDBPrincipal) {
+        System.out.println("[Backup] Solicitando BD a " + ipPrincipal + ":" + portoDBPrincipal);
+        try (Socket s = new Socket(ipPrincipal, portoDBPrincipal);
+             InputStream is = s.getInputStream();
+             FileOutputStream fos = new FileOutputStream(dbPath)) {
+
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, bytesRead);
+            }
+            System.out.println("[Backup] Cópia da BD recebida e salva.");
+
+        } catch (Exception e) {
+            System.err.println("[Backup] ERRO: Falha ao obter cópia inicial da BD. A terminar.");
+            System.exit(1);
+        }
     }
 
     // --- COMUNICAÇÃO COM DIRETORIA (UDP/Registo) ---
