@@ -39,6 +39,7 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() {
         try {
+            // Define o timeout inicial para a fase de login/registo
             clientSocket.setSoTimeout(AUTH_TIMEOUT_MS);
 
             // --- FASE 1: AUTENTICAÇÃO ---
@@ -50,7 +51,7 @@ public class ClientHandler implements Runnable {
                     else enviarObjeto("ERRO: Login/Registo necessário.");
                 } catch (SocketTimeoutException e) {
                     enviarObjeto("TIMEOUT: Login expirou.");
-                    return; // Sai do handler
+                    return;
                 }
             }
 
@@ -61,6 +62,13 @@ public class ClientHandler implements Runnable {
             while (true) {
                 Object msg = in.readObject();
 
+                // 1. TRATAMENTO EXPLÍCITO DE LOGOUT (Permite a troca de conta/re-login)
+                if (msg instanceof MsgLogout) {
+                    enviarObjeto("SUCESSO: Logout efetuado.");
+                    return;
+                }
+
+                // 2. LOGICA DE NEGÓCIO
                 if (estadoLogin == ESTADO_DOCENTE) {
                     if (msg instanceof MsgCriarPergunta) {
                         processarCriarPergunta((MsgCriarPergunta) msg);
@@ -89,6 +97,7 @@ public class ClientHandler implements Runnable {
                     } else if (msg instanceof MsgResponderPergunta) {
                         processarResponderPergunta((MsgResponderPergunta) msg);
                     }
+                    // FALTA: Lógica para MsgObterHistorico aqui
                 }
             }
 
@@ -97,7 +106,10 @@ public class ClientHandler implements Runnable {
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
-            try { clientSocket.close(); } catch (IOException e) {}
+            try {
+                // CRÍTICO: Garantir que o socket fecha em caso de exceção ou logout
+                if (clientSocket != null) clientSocket.close();
+            } catch (IOException e) {}
         }
     }
 

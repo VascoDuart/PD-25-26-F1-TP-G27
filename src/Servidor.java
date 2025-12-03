@@ -77,8 +77,8 @@ public class Servidor implements ServerAPI {
 
                 if (this.isPrincipal) {
                     System.out.println("[Servidor] >>> MODO PRINCIPAL <<<");
-                    aceitarPedidosBD(); // Aceita Backups que querem a BD
-                    aceitarClientes();  // Aceita Clientes
+                    aceitarPedidosBD();
+                    aceitarClientes();
                 } else {
                     System.out.println("[Servidor] >>> MODO BACKUP <<<");
                     receberCopiaBD(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
@@ -97,6 +97,30 @@ public class Servidor implements ServerAPI {
         } finally {
             fecharRecursos();
         }
+    }
+
+    public boolean isPrincipal() {
+        return this.isPrincipal;
+    }
+
+    public InetAddress getIPLocal() {
+        return this.ipLocal;
+    }
+
+    public int getPortoClienteTCP() {
+        return this.portoClienteTCP;
+    }
+
+    public synchronized void ativarServicosPrincipal() {
+        if (this.isPrincipal) return;
+
+        this.isPrincipal = true;
+        System.out.println("[Servidor] PROMOVIDO A PRINCIPAL. Iniciando escuta...");
+
+        aceitarPedidosBD();
+        aceitarClientes();
+
+        notificarTodosClientes("Servico Principal restabelecido.");
     }
 
     private void fecharRecursos() {

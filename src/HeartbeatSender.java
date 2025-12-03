@@ -1,4 +1,6 @@
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.IOException;
 import java.net.*;
@@ -27,18 +29,24 @@ public class HeartbeatSender implements Runnable {
         this.ipLocal = ipLocal;
     }
 
-    public void stop() { running = false; }
+    public void stop() {
+        running = false;
+    }
 
+    /**
+     * Dispara um Heartbeat de escrita imediatamente na próxima iteração do loop.
+     */
     public void dispararHeartbeatEscrita(String querySQL, int novaVersao) {
-        // Marcamos o Heartbeat de Escrita para ser enviado no próximo ciclo ou imediatamente
         this.pendingQuery = querySQL;
         this.pendingVersion = novaVersao;
-        // O loop 'run' pode ser notificado (via wait/notify ou simplesmente espera o próximo ciclo)
     }
 
     @Override
     public void run() {
-        try (DatagramSocket socketDir = new DatagramSocket()) { // UDP Socket para a Diretoria
+        try (DatagramSocket socketDir = new DatagramSocket()) {
+            // Definir um timeout para a resposta da Diretoria (para não bloquear o loop Heartbeat)
+            socketDir.setSoTimeout(3000);
+
             while (running) {
                 Thread.sleep(5000); // Espera 5 segundos
 
@@ -60,7 +68,18 @@ public class HeartbeatSender implements Runnable {
                 // 1. Envio para a Diretoria (UDP Unicast)
                 socketDir.send(new DatagramPacket(data, data.length, InetAddress.getByName(ipDiretorio), portoDiretorio));
 
-                // 2. Envio para o Cluster (UDP Multicast)
+                // 2. RECEBER RESPOSTA E VERIFICAR PROMOÇÃO (CRÍTICO)
+                byte[] buffer = new byte[4096];
+                DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
+
+                try {
+                    socketDir.receive(responsePacket);
+                    processarRespostaDiretoria(responsePacket, socketDir); // Processa a resposta
+                } catch (SocketTimeoutException e) {
+                    System.out.println("[HeartbeatSender] Timeout ao esperar resposta da Diretoria (esperado).");
+                }
+
+                // 3. Envio para o Cluster (UDP Multicast) - Apenas se formos o Principal ou Backup
                 enviarMulticast(data);
             }
         } catch (InterruptedException e) {
@@ -69,6 +88,29 @@ public class HeartbeatSender implements Runnable {
             System.err.println("[HeartbeatSender] Erro de I/O: " + e.getMessage());
         }
     }
+
+    private void processarRespostaDiretoria(DatagramPacket packet, DatagramSocket socketDir) {
+        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()))) {
+            MsgRespostaDiretoria resposta = (MsgRespostaDiretoria) ois.readObject();
+
+            if (!servidor.isPrincipal()) { // Se o servidor atual é um Backup
+
+                // 1. Verificar se a Diretoria nos indica como o NOVO Principal
+                boolean somosONovoPrincipal =
+                        resposta.getIpServidorPrincipal().equals(servidor.getIPLocal()) &&
+                                resposta.getPortoClienteTCP() == servidor.getPortoClienteTCP();
+
+                if (somosONovoPrincipal) {
+                    // 2. Disparar a Ativação do Serviço (Mudar o papel)
+                    System.out.println("[HeartbeatSender] PROMOÇÃO DETETADA PELA DIRETORIA. Ativando serviços...");
+                    servidor.ativarServicosPrincipal();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[HeartbeatSender] Erro ao processar resposta da Diretoria: " + e.getMessage());
+        }
+    }
+
 
     private void enviarMulticast(byte[] data) {
         try (MulticastSocket socketMulti = new MulticastSocket()) {
