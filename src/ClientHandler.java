@@ -90,6 +90,31 @@ public class ClientHandler implements Runnable {
                     else if (msg instanceof MsgEditarPergunta) {
                         processarEditarPergunta((MsgEditarPergunta) msg);
                     }
+
+                    else if (msg instanceof MsgObterEstatisticas) {
+                        String codigo = ((MsgObterEstatisticas) msg).getCodigoAcesso();
+                        // Verificar se é o dono da pergunta
+                        if (dbManager.podeAlterarPergunta(codigo, userId)) {
+
+                            // MELHOR ABORDAGEM: Verificar só o ID do dono
+                            int donoId = dbManager.obterDocenteIDDaPergunta(codigo);
+                            if (donoId == userId) {
+                                String stats = dbManager.obterEstatisticas(codigo);
+                                enviarObjeto(stats);
+                            } else {
+                                enviarObjeto("ERRO: Pergunta não encontrada ou não lhe pertence.");
+                            }
+                        } else {
+
+                            int donoId = dbManager.obterDocenteIDDaPergunta(codigo);
+                            if (donoId == userId) {
+                                String stats = dbManager.obterEstatisticas(codigo);
+                                enviarObjeto(stats);
+                            } else {
+                                enviarObjeto("ERRO: Acesso negado.");
+                            }
+                        }
+                    }
                 }
                 else if (estadoLogin == ESTADO_ESTUDANTE) {
                     if (msg instanceof MsgObterPergunta) {
@@ -97,7 +122,12 @@ public class ClientHandler implements Runnable {
                     } else if (msg instanceof MsgResponderPergunta) {
                         processarResponderPergunta((MsgResponderPergunta) msg);
                     }
-                    // FALTA: Lógica para MsgObterHistorico aqui
+
+                    else if (msg instanceof MsgObterHistorico) {
+                        List<HistoricoItem> historico = dbManager.obterHistoricoEstudante(userId);
+                        enviarObjeto(historico);
+                    }
+
                 }
             }
 

@@ -55,8 +55,9 @@ public class ClienteVista {
         System.out.println("\n=== DOCENTE ===");
         System.out.println("1. Criar Pergunta");
         System.out.println("2. Exportar Resultados (CSV)");
-        System.out.println("3. Editar Pergunta");   // NOVO
-        System.out.println("4. Eliminar Pergunta"); // NOVO
+        System.out.println("3. Editar Pergunta");
+        System.out.println("4. Eliminar Pergunta");
+        System.out.println("5. Ver Estatísticas");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }
@@ -64,6 +65,7 @@ public class ClienteVista {
     public int menuEstudante() {
         System.out.println("\n=== ESTUDANTE ===");
         System.out.println("1. Responder a Pergunta");
+        System.out.println("2. Ver Histórico");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }

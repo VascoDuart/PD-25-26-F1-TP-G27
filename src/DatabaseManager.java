@@ -554,4 +554,78 @@ public class DatabaseManager {
         }
         return null;
     }
+
+    // ... (restante código) ...
+
+    // --- NOVA FUNCIONALIDADE: HISTÓRICO ---
+    public List<HistoricoItem> obterHistoricoEstudante(int estudanteId) {
+        List<HistoricoItem> lista = new ArrayList<>();
+        // Query: Junta Resposta, Pergunta e Opcao.
+        // Filtra apenas perguntas onde o prazo (fim) já passou.
+        String sql = "SELECT p.enunciado, p.codigo_acesso, r.data_hora, r.opcao_escolhida, " +
+                "(SELECT o.opcao_correta FROM Opcao o WHERE o.pergunta_id = p.id AND o.letra_opcao = r.opcao_escolhida) as acertou " +
+                "FROM Resposta r " +
+                "JOIN Pergunta p ON r.pergunta_id = p.id " +
+                "WHERE r.estudante_id = ? AND datetime(p.fim) < datetime('now', 'localtime')";
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, estudanteId);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                lista.add(new HistoricoItem(
+                        rs.getString("enunciado"),
+                        rs.getString("codigo_acesso"),
+                        rs.getString("data_hora"),
+                        rs.getString("opcao_escolhida"),
+                        rs.getBoolean("acertou")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro histórico: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    // --- NOVA FUNCIONALIDADE: ESTATÍSTICAS ---
+    public String obterEstatisticas(String codigoAcesso) {
+        int pId = -1;
+        // 1. Descobrir ID da pergunta
+        try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM Pergunta WHERE codigo_acesso = ?")) {
+            ps.setString(1, codigoAcesso);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) pId = rs.getInt(1);
+            else return "Pergunta não encontrada.";
+        } catch (Exception e) { return "Erro BD."; }
+
+        // 2. Calcular Totais
+        String sqlTotal = "SELECT COUNT(*) FROM Resposta WHERE pergunta_id = ?";
+        String sqlCertas = "SELECT COUNT(*) FROM Resposta r " +
+                "JOIN Opcao o ON r.pergunta_id = o.pergunta_id AND r.opcao_escolhida = o.letra_opcao " +
+                "WHERE r.pergunta_id = ? AND o.opcao_correta = 1"; // 1 é true no SQLite
+
+        try {
+            int total = 0;
+            int certas = 0;
+
+            try (PreparedStatement ps1 = conn.prepareStatement(sqlTotal)) {
+                ps1.setInt(1, pId);
+                ResultSet rs1 = ps1.executeQuery();
+                if (rs1.next()) total = rs1.getInt(1);
+            }
+
+            if (total == 0) return "Sem respostas submetidas ainda.";
+
+            try (PreparedStatement ps2 = conn.prepareStatement(sqlCertas)) {
+                ps2.setInt(1, pId);
+                ResultSet rs2 = ps2.executeQuery();
+                if (rs2.next()) certas = rs2.getInt(1);
+            }
+
+            double percentagem = ((double) certas / total) * 100;
+            return String.format("Total Respostas: %d | Certas: %d | Taxa de Sucesso: %.1f%%", total, certas, percentagem);
+
+        } catch (SQLException e) {
+            return "Erro ao calcular estatísticas: " + e.getMessage();
+        }
+    }
 }

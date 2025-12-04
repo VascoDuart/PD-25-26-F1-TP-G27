@@ -230,6 +230,11 @@ public class Cliente {
                     vista.mostrarMensagem((String) coms.receber());
                 }
             }
+            else if (op == 5) { // ESTATÍSTICAS
+                String codigo = vista.lerTexto("Código da pergunta: ");
+                coms.enviar(new MsgObterEstatisticas(codigo));
+                vista.mostrarMensagem((String) coms.receber());
+            }
             else if (op == 0) { // LOGOUT
                 try {
                     coms.enviar(new MsgLogout()); // Sinaliza o Servidor para fechar
@@ -257,6 +262,22 @@ public class Cliente {
                     vista.mostrarMensagem((String) coms.receber());
                 } else {
                     vista.mostrarErro("Pergunta não encontrada.");
+                }
+            }
+
+            else if (op == 2) { // HISTÓRICO
+                coms.enviar(new MsgObterHistorico());
+                Object resp = coms.receber();
+                if (resp instanceof List) {
+                    List<HistoricoItem> lista = (List<HistoricoItem>) resp;
+                    if (lista.isEmpty()) {
+                        vista.mostrarMensagem("Sem histórico de perguntas expiradas.");
+                    } else {
+                        System.out.println("\n--- Histórico ---");
+                        for (HistoricoItem item : lista) {
+                            System.out.println(item);
+                        }
+                    }
                 }
             }
             else if (op == 0) {
