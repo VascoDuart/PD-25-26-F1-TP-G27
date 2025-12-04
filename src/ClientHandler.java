@@ -259,29 +259,30 @@ public class ClientHandler implements Runnable {
     private void processarObterRespostas(MsgObterRespostas msg) throws IOException {
         String codigo = msg.getCodigoAcesso();
 
-        // 1. Validação de Autorização
+        // 1. Validação de Autorização (propriedade do docente)
         int donoID = dbManager.obterDocenteIDDaPergunta(codigo);
 
         if (donoID == userId) {
-            // Verifica se a pergunta existe
+            // 2. CRÍTICO: Verificar se a pergunta expirou para permitir exportação
+            if (!dbManager.isPerguntaExpirada(codigo)) {
+                // Se a pergunta não expirou, envia mensagem de erro e termina
+                enviarObjeto("ERRO: A exportação só é permitida para perguntas expiradas.");
+                return;
+            }
+
+            // Se a pergunta expirou e o docente é o dono, continuamos o fluxo:
             Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
 
             if (p != null) {
-                // 2. Obter APENAS a lista de respostas
                 List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
-
-                // CORREÇÃO: Enviar diretamente a lista de respostas (sem envolver num array de objetos)
-                // O Cliente já tem a pergunta do passo anterior.
+                // Envia a lista de respostas. O Cliente usa esta lista para gerar o CSV.
                 enviarObjeto(resps);
-
             } else {
-                // Envia lista vazia se não encontrar
-                enviarObjeto(new ArrayList<RespostaEstudante>());
+                // Pergunta existe, mas não foram encontrados dados (improvável se passou no isPerguntaExpirada)
+                enviarObjeto("ERRO: Pergunta não encontrada.");
             }
         } else {
-            // Se não for o dono, envia lista vazia (ou podia enviar mensagem de erro)
-            // Mantemos lista vazia para evitar erro de cast no cliente
-            enviarObjeto(new ArrayList<RespostaEstudante>());
+            enviarObjeto("ERRO: Acesso negado ou pergunta não pertence a este Docente.");
         }
     }
 

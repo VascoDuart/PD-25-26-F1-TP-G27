@@ -5,9 +5,9 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 public class DatabaseManager {
+    private static final java.time.format.DateTimeFormatter FORMATTER = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private String dbPath;
     private Connection conn;
@@ -328,6 +328,27 @@ public class DatabaseManager {
         }
     }
 
+    public boolean isPerguntaExpirada(String codigoAcesso) {
+        String sql = "SELECT fim FROM Pergunta WHERE codigo_acesso = ?";
+        try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, codigoAcesso);
+            java.sql.ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                String fimStr = rs.getString("fim");
+                java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr.trim(), FORMATTER);
+                java.time.LocalDateTime agora = java.time.LocalDateTime.now();
+
+                return fim.isBefore(agora);
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("[BD] Erro ao verificar expiração: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("[BD] Erro de parsing de data: " + e.getMessage());
+        }
+        return false;
+    }
+
     public Pergunta obterPerguntaPorCodigo(String codigo) {
         String sql = "SELECT id, enunciado, inicio, fim FROM Pergunta WHERE codigo_acesso = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -443,33 +464,55 @@ public class DatabaseManager {
         List<RespostaEstudante> lista = new ArrayList<>();
         String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
         int perguntaId = -1;
+
+        // 1. Obter ID da Pergunta (Usando try-with-resources para garantir o fecho do ResultSet)
         try (PreparedStatement ps = conn.prepareStatement(sqlId)) {
             ps.setString(1, codigoAcesso);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) perguntaId = rs.getInt("id");
+
+            // O ResultSet da primeira consulta agora está em seu próprio try-with-resources
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) perguntaId = rs.getInt("id");
+            }
         } catch (SQLException e) {
+            System.err.println("[BD] Erro ao obter ID da pergunta: " + e.getMessage());
             return lista;
         }
 
-        if (perguntaId == -1) return lista;
+        if (perguntaId == -1) {
+            System.out.println("[DEBUG DB] Pergunta com código " + codigoAcesso + " não encontrada.");
+            return lista;
+        }
+
+        // 2. Query com JOIN (Resposta + Estudante)
+        System.out.println("[DEBUG DB] Iniciando consulta de respostas..."); // LOG 1
 
         String sql = "SELECT e.numero_estudante, e.nome, e.email, r.opcao_escolhida " +
                 "FROM Resposta r JOIN Estudante e ON r.estudante_id = e.id WHERE r.pergunta_id = ?";
 
+        // O PreparedStatement e o ResultSet da segunda consulta também usam try-with-resources
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, perguntaId);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                lista.add(new RespostaEstudante(
-                        rs.getString("numero_estudante"),
-                        rs.getString("nome"),
-                        rs.getString("email"),
-                        rs.getString("opcao_escolhida")
-                ));
-            }
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                System.out.println("[DEBUG DB] Consulta SQL executada. Lendo resultados..."); // LOG 2
+
+                while (rs.next()) {
+                    lista.add(new RespostaEstudante(
+                            rs.getString("numero_estudante"),
+                            rs.getString("nome"),
+                            rs.getString("email"),
+                            rs.getString("opcao_escolhida")
+                    ));
+                }
+
+                System.out.println("[DEBUG DB] Fim da leitura. Total de respostas lidas: " + lista.size()); // LOG 3
+
+            } // Fecho automático do ResultSet
         } catch (SQLException e) {
-            System.err.println("[BD] Erro ao obter respostas para CSV: " + e.getMessage());
-        }
+            System.err.println("[BD] Erro fatal ao obter respostas: " + e.getMessage());
+        } // Fecho automático do PreparedStatement
+
+        System.out.println("[DEBUG DB] Retornando lista de respostas."); // LOG 4
         return lista;
     }
 
