@@ -1,4 +1,14 @@
+import java.io.Serializable;
+
 public class MsgObterPerguntas extends Mensagem {
     private static final long serialVersionUID = 1L;
-    // Não precisa de campos, o servidor sabe quem é o docente pelo Handler
+
+    // Filtros possíveis: "TODAS", "ATIVAS", "FUTURAS", "EXPIRADAS"
+    private final String filtro;
+
+    public MsgObterPerguntas(String filtro) {
+        this.filtro = filtro;
+    }
+
+    public String getFiltro() { return filtro; }
 }

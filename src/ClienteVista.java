@@ -54,10 +54,11 @@ public class ClienteVista {
     public int menuDocente() {
         System.out.println("\n=== DOCENTE ===");
         System.out.println("1. Criar Pergunta");
-        System.out.println("2. Exportar Resultados (CSV)");
+        System.out.println("2. Consultar Perguntas");
         System.out.println("3. Editar Pergunta");
         System.out.println("4. Eliminar Pergunta");
         System.out.println("5. Ver Estatísticas");
+        System.out.println("6. Exportar CSV");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }
@@ -68,6 +69,17 @@ public class ClienteVista {
         System.out.println("2. Ver Histórico");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
+    }
+
+    public String escolherFiltro() {
+        System.out.println("Filtro: [1] Ativas | [2] Futuras | [3] Expiradas | [0] Todas");
+        int op = lerInteiro("> ");
+        switch (op) {
+            case 1: return "ATIVAS";
+            case 2: return "FUTURAS";
+            case 3: return "EXPIRADAS";
+            default: return "TODAS";
+        }
     }
 
     public MsgLogin formLogin() {

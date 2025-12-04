@@ -4,6 +4,8 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class DatabaseManager {
 
@@ -239,7 +241,8 @@ public class DatabaseManager {
             pstmt.setString(1, email);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) return rs.getInt("id");
-        } catch (SQLException e) {}
+        } catch (SQLException e) {
+        }
         return -1;
     }
 
@@ -249,7 +252,8 @@ public class DatabaseManager {
             pstmt.setString(1, email);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) return rs.getInt("id");
-        } catch (SQLException e) {}
+        } catch (SQLException e) {
+        }
         return -1;
     }
 
@@ -311,10 +315,16 @@ public class DatabaseManager {
 
         } catch (SQLException e) {
             System.err.println("[BD] Erro ao criar pergunta (rollback): " + e.getMessage());
-            try { conn.rollback(); } catch (SQLException ex) {}
+            try {
+                conn.rollback();
+            } catch (SQLException ex) {
+            }
             return null;
         } finally {
-            try { conn.setAutoCommit(true); } catch (SQLException e) {}
+            try {
+                conn.setAutoCommit(true);
+            } catch (SQLException e) {
+            }
         }
     }
 
@@ -427,27 +437,7 @@ public class DatabaseManager {
     // 7. RELATÓRIOS E LISTAGENS
     // ==================================================================================
 
-    public List<Pergunta> obterPerguntasDoDocente(int docenteId) {
-        List<Pergunta> lista = new ArrayList<>();
-        String sql = "SELECT id, enunciado, codigo_acesso, inicio, fim FROM Pergunta WHERE docente_id = ?";
 
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, docenteId);
-            ResultSet rs = pstmt.executeQuery();
-
-            while (rs.next()) {
-                int pId = rs.getInt("id");
-                String enunc = rs.getString("enunciado");
-                String cod = rs.getString("codigo_acesso");
-                String ini = rs.getString("inicio");
-                String fim = rs.getString("fim");
-                lista.add(new Pergunta(pId, enunc, cod, ini, fim, new ArrayList<>()));
-            }
-        } catch (SQLException e) {
-            System.err.println("[BD] Erro ao listar perguntas do docente: " + e.getMessage());
-        }
-        return lista;
-    }
 
     public List<RespostaEstudante> obterRespostasDaPergunta(String codigoAcesso) {
         List<RespostaEstudante> lista = new ArrayList<>();
@@ -457,7 +447,9 @@ public class DatabaseManager {
             ps.setString(1, codigoAcesso);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) perguntaId = rs.getInt("id");
-        } catch (SQLException e) { return lista; }
+        } catch (SQLException e) {
+            return lista;
+        }
 
         if (perguntaId == -1) return lista;
 
@@ -595,7 +587,9 @@ public class DatabaseManager {
             ResultSet rs = ps.executeQuery();
             if (rs.next()) pId = rs.getInt(1);
             else return "Pergunta não encontrada.";
-        } catch (Exception e) { return "Erro BD."; }
+        } catch (Exception e) {
+            return "Erro BD.";
+        }
 
         // 2. Calcular Totais
         String sqlTotal = "SELECT COUNT(*) FROM Resposta WHERE pergunta_id = ?";
@@ -627,5 +621,89 @@ public class DatabaseManager {
         } catch (SQLException e) {
             return "Erro ao calcular estatísticas: " + e.getMessage();
         }
+    }
+
+
+    public List<Pergunta> listarPerguntasComFiltro(int docenteId, String filtro) {
+        List<Pergunta> lista = new ArrayList<>();
+        String sql = "SELECT id, enunciado, codigo_acesso, inicio, fim FROM Pergunta WHERE docente_id = ? ORDER BY inicio DESC";
+
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        java.time.LocalDateTime agora = java.time.LocalDateTime.now();
+
+        // LIMPEZA DO FILTRO (Para garantir que não há lixo)
+        if (filtro == null) filtro = "TODAS";
+        filtro = filtro.trim().toUpperCase();
+
+        System.out.println("\n=== DEBUG FILTRO ===");
+        System.out.println("Filtro recebido: '" + filtro + "'");
+        System.out.println("Data Atual: " + agora);
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, docenteId);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                String cod = rs.getString("codigo_acesso");
+                String inicioStr = rs.getString("inicio");
+                String fimStr = rs.getString("fim");
+
+                boolean adicionar = false;
+                String motivo = "Rejeitado";
+
+                try {
+                    java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr.trim(), formatter);
+                    java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr.trim(), formatter);
+
+                    switch (filtro) {
+                        case "ATIVAS":
+                            // Começou antes de agora E acaba depois de agora
+                            if (!inicio.isAfter(agora) && !fim.isBefore(agora)) {
+                                adicionar = true;
+                                motivo = "Aceite (Está a decorrer)";
+                            } else {
+                                motivo = "Rejeitado (Não está no intervalo)";
+                            }
+                            break;
+
+                        case "FUTURAS":
+                            if (inicio.isAfter(agora)) {
+                                adicionar = true;
+                                motivo = "Aceite (Começa no futuro)";
+                            } else {
+                                motivo = "Rejeitado (Já começou)";
+                            }
+                            break;
+
+                        case "EXPIRADAS":
+                            if (fim.isBefore(agora)) {
+                                adicionar = true;
+                                motivo = "Aceite (Já acabou)";
+                            } else {
+                                motivo = "Rejeitado (Ainda não acabou)";
+                            }
+                            break;
+
+                        default:
+                            adicionar = true;
+                            motivo = "Aceite (Filtro TODOS ou Inválido: " + filtro + ")";
+                            break;
+                    }
+
+                    System.out.println(" -> Pergunta [" + cod + "] (" + inicioStr + " - " + fimStr + "): " + motivo);
+
+                } catch (Exception e) {
+                    System.out.println(" -> Pergunta [" + cod + "]: ERRO DATA - " + e.getMessage());
+                }
+
+                if (adicionar) {
+                    lista.add(new Pergunta(rs.getInt("id"), rs.getString("enunciado"), cod, inicioStr, fimStr, new ArrayList<>()));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        System.out.println("====================\n");
+        return lista;
     }
 }

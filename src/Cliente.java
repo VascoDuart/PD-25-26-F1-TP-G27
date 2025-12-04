@@ -184,33 +184,22 @@ public class Cliente {
                 coms.enviar(vista.formCriarPergunta());
                 vista.mostrarMensagem((String) coms.receber());
             }
-            else if (op == 2) { // EXPORTAR CSV
-                // --- Lógica de Exportação original (usando o servidor) ---
-                coms.enviar(new MsgObterPerguntas());
-                Object resp = coms.receber();
+            else if (op == 2) { // CONSULTAR (Novo!)
+                String filtro = vista.escolherFiltro();
+                coms.enviar(new MsgObterPerguntas(filtro));
 
+                Object resp = coms.receber();
                 if (resp instanceof List) {
                     List<Pergunta> lista = (List<Pergunta>) resp;
                     if (lista.isEmpty()) {
-                        vista.mostrarErro("Não tem perguntas criadas.");
+                        vista.mostrarMensagem("Nenhuma pergunta encontrada para o filtro: " + filtro);
                     } else {
-                        vista.mostrarListaPerguntas(lista);
-                        String codigo = vista.lerTexto("Código da pergunta a exportar: ");
-
-                        // Pedir pergunta completa e respostas (requer 2 viagens)
-                        coms.enviar(new MsgObterPergunta(codigo));
-                        Pergunta pCompleta = (Pergunta) coms.receber();
-
-                        coms.enviar(new MsgObterRespostas(codigo));
-                        List<RespostaEstudante> respostas = (List<RespostaEstudante>) coms.receber();
-
-                        if (pCompleta != null && respostas != null) {
-                            String nomeFicheiro = "resultados_" + codigo + ".csv";
-                            ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
-                            vista.mostrarMensagem("Ficheiro CSV gerado: " + nomeFicheiro);
-                        } else {
-                            vista.mostrarErro("Pergunta não encontrada ou erro na recuperação dos dados.");
+                        System.out.println("\n--- Lista de Perguntas (" + filtro + ") ---");
+                        for (Pergunta p : lista) {
+                            System.out.printf("[%s] %s (Início: %s | Fim: %s)\n",
+                                    p.getCodigoAcesso(), p.getEnunciado(), p.getInicio(), p.getFim());
                         }
+                        System.out.println("----------------------------------------");
                     }
                 }
             }
@@ -234,6 +223,25 @@ public class Cliente {
                 String codigo = vista.lerTexto("Código da pergunta: ");
                 coms.enviar(new MsgObterEstatisticas(codigo));
                 vista.mostrarMensagem((String) coms.receber());
+            }
+            else if (op == 6) { // EXPORTAR CSV (Mudei para opção 6)
+                // Podes reutilizar a lógica antiga, mas agora podes perguntar o código diretamente
+                String codigo = vista.lerTexto("Código da pergunta a exportar: ");
+
+                // Pedir pergunta e respostas
+                coms.enviar(new MsgObterPergunta(codigo));
+                Pergunta pCompleta = (Pergunta) coms.receber();
+
+                coms.enviar(new MsgObterRespostas(codigo));
+                List<RespostaEstudante> respostas = (List<RespostaEstudante>) coms.receber();
+
+                if (pCompleta != null && respostas != null) {
+                    String nomeFicheiro = "resultados_" + codigo + ".csv";
+                    ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
+                    vista.mostrarMensagem("Ficheiro CSV gerado: " + nomeFicheiro);
+                } else {
+                    vista.mostrarErro("Pergunta não encontrada ou sem dados.");
+                }
             }
             else if (op == 0) { // LOGOUT
                 try {

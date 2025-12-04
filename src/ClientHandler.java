@@ -73,12 +73,14 @@ public class ClientHandler implements Runnable {
                     if (msg instanceof MsgCriarPergunta) {
                         processarCriarPergunta((MsgCriarPergunta) msg);
                     }
+
                     else if (msg instanceof MsgObterPerguntas) {
-                        List<Pergunta> lista = dbManager.obterPerguntasDoDocente(userId);
+                        String filtro = ((MsgObterPerguntas) msg).getFiltro();
+                        System.out.println("[DEBUG] A filtrar por: " + filtro); // Log para confirmares!
+
+                        // Chama o método novo que sabe filtrar
+                        List<Pergunta> lista = dbManager.listarPerguntasComFiltro(userId, filtro);
                         enviarObjeto(lista);
-                    }
-                    else if (msg instanceof MsgObterPergunta) {
-                        processarObterPergunta((MsgObterPergunta) msg);
                     }
                     else if (msg instanceof MsgObterRespostas) {
                         processarObterRespostas((MsgObterRespostas) msg);
