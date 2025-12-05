@@ -349,6 +349,34 @@ public class DatabaseManager {
         return false;
     }
 
+    // Dentro da classe DatabaseManager
+
+    public boolean isPerguntaAtiva(String codigoAcesso) {
+        String sql = "SELECT inicio, fim FROM Pergunta WHERE codigo_acesso = ?";
+        try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, codigoAcesso);
+            java.sql.ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                String inicioStr = rs.getString("inicio");
+                String fimStr = rs.getString("fim");
+
+                // As datas devem ser trimmed para evitar erros de parsing de espaço em branco
+                java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr.trim(), FORMATTER);
+                java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr.trim(), FORMATTER);
+                java.time.LocalDateTime agora = java.time.LocalDateTime.now();
+
+                // A pergunta é ATIVA se: (Início <= Agora) E (Fim >= Agora)
+                return !inicio.isAfter(agora) && !fim.isBefore(agora);
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("[BD] Erro ao verificar estado: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("[BD] Erro de parsing de data: " + e.getMessage());
+        }
+        return false;
+    }
+
     public Pergunta obterPerguntaPorCodigo(String codigo) {
         String sql = "SELECT id, enunciado, inicio, fim FROM Pergunta WHERE codigo_acesso = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {

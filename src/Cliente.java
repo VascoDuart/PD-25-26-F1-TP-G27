@@ -81,10 +81,10 @@ public class Cliente {
                 }
             }
         } catch (Exception e) {
-            // Falha de I/O na comunicação (socket quebrado)
+            // Falha de I/O na comunicação (socket quebrado).
+            // O estado de autenticação (tipoUtilizador, credenciais) é MANTIDO para re-autenticação.
             vista.mostrarErro("Comunicação TCP falhou durante a sessão: " + e.getMessage());
             coms.fechar();
-            tipoUtilizador = 0;
             return true; // Sinaliza para iniciar a recuperação
         }
         // Logout intencional
@@ -94,6 +94,7 @@ public class Cliente {
 
     // ==================================================================================
     // LÓGICA DE AUTENTICAÇÃO E RECUPERAÇÃO DE FALHA
+    // ... (Métodos tratarLogin, reautenticarAutomaticamente, tratarRecuperacaoFalha são mantidos)
     // ==================================================================================
 
     private static void tratarLogin() {
@@ -184,7 +185,7 @@ public class Cliente {
                 coms.enviar(vista.formCriarPergunta());
                 vista.mostrarMensagem((String) coms.receber());
             }
-            else if (op == 2) { // CONSULTAR (Novo!)
+            else if (op == 2) { // CONSULTAR
                 String filtro = vista.escolherFiltro();
                 coms.enviar(new MsgObterPerguntas(filtro));
 
@@ -201,6 +202,8 @@ public class Cliente {
                         }
                         System.out.println("----------------------------------------");
                     }
+                } else {
+                    vista.mostrarErro("Erro ao obter lista: " + resp);
                 }
             }
             else if (op == 3) { // EDITAR PERGUNTA
@@ -222,25 +225,45 @@ public class Cliente {
             else if (op == 5) { // ESTATÍSTICAS
                 String codigo = vista.lerTexto("Código da pergunta: ");
                 coms.enviar(new MsgObterEstatisticas(codigo));
+                // Estatísticas devolve sempre String (ou a stats ou a mensagem de erro)
                 vista.mostrarMensagem((String) coms.receber());
             }
-            else if (op == 6) { // EXPORTAR CSV (Mudei para opção 6)
-                // Podes reutilizar a lógica antiga, mas agora podes perguntar o código diretamente
+            else if (op == 6) { // EXPORTAR CSV
                 String codigo = vista.lerTexto("Código da pergunta a exportar: ");
+                Pergunta pCompleta = null;
+                List<RespostaEstudante> respostas = null;
 
-                // Pedir pergunta e respostas
+                // --- 1. PEDIR PERGUNTA (Pode devolver Pergunta ou String de ERRO) ---
                 coms.enviar(new MsgObterPergunta(codigo));
-                Pergunta pCompleta = (Pergunta) coms.receber();
+                Object respP = coms.receber();
 
+                if (respP instanceof Pergunta) {
+                    pCompleta = (Pergunta) respP;
+                } else {
+                    vista.mostrarErro("Falha ao obter Pergunta (Causa: " + respP + ").");
+                    return; // Sai da rotina de exportação.
+                }
+
+                // --- 2. PEDIR RESPOSTAS (Pode devolver List<RespostaEstudante> ou String de ERRO) ---
+                // O ClientHandler fará a validação final (expirada, etc.).
                 coms.enviar(new MsgObterRespostas(codigo));
-                List<RespostaEstudante> respostas = (List<RespostaEstudante>) coms.receber();
+                Object respR = coms.receber();
 
+                if (respR instanceof List) {
+                    respostas = (List<RespostaEstudante>) respR;
+                } else {
+                    // Recebeu um ERRO (String): Acesso negado, Não Expirada, etc.
+                    vista.mostrarErro("Falha ao obter respostas: " + respR);
+                    return;
+                }
+
+                // --- 3. EXPORTAR ---
                 if (pCompleta != null && respostas != null) {
                     String nomeFicheiro = "resultados_" + codigo + ".csv";
                     ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
                     vista.mostrarMensagem("Ficheiro CSV gerado: " + nomeFicheiro);
                 } else {
-                    vista.mostrarErro("Pergunta não encontrada ou sem dados.");
+                    vista.mostrarErro("Dados de exportação incompletos.");
                 }
             }
             else if (op == 0) { // LOGOUT
@@ -269,7 +292,8 @@ public class Cliente {
                     coms.enviar(new MsgResponderPergunta(-1, cod, letra));
                     vista.mostrarMensagem((String) coms.receber());
                 } else {
-                    vista.mostrarErro("Pergunta não encontrada.");
+                    // Recebeu ERRO String (Pergunta não ativa/encontrada)
+                    vista.mostrarErro("Falha ao obter pergunta: " + resp);
                 }
             }
 

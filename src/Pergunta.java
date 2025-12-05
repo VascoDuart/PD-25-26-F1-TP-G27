@@ -38,6 +38,7 @@ public class Pergunta implements Serializable {
     public String getFim() { return dataFim; }
     public void setCodigoAcesso(String codigo) { this.codigoAcesso = codigo; }
     public void setId(int id) { this.id = id; }
+    public void setOpcoes(List<Opcao> opcoes) {this.opcoes = opcoes;}
 
     // Para debug
     @Override
