@@ -18,6 +18,7 @@ public class HeartbeatSender implements Runnable {
     private volatile boolean running = true;
     private volatile String pendingQuery = null;
     private volatile int pendingVersion = -1;
+    private volatile boolean isPrincipal = false; // Estado interno para envio Multicast
 
     public HeartbeatSender(Servidor s, DatabaseManager db, String ipDir, int pDir, int pCliente, int pDB, InetAddress ipLocal) {
         this.servidor = s;
@@ -29,13 +30,9 @@ public class HeartbeatSender implements Runnable {
         this.ipLocal = ipLocal;
     }
 
-    public void stop() {
-        running = false;
-    }
+    public void stop() { running = false; }
+    public void updateRole(boolean isPrincipal) { this.isPrincipal = isPrincipal; } // Setter para a transição
 
-    /**
-     * Dispara um Heartbeat de escrita imediatamente na próxima iteração do loop.
-     */
     public void dispararHeartbeatEscrita(String querySQL, int novaVersao) {
         this.pendingQuery = querySQL;
         this.pendingVersion = novaVersao;
@@ -44,20 +41,17 @@ public class HeartbeatSender implements Runnable {
     @Override
     public void run() {
         try (DatagramSocket socketDir = new DatagramSocket()) {
-            // Definir um timeout para a resposta da Diretoria (para não bloquear o loop Heartbeat)
             socketDir.setSoTimeout(3000);
 
             while (running) {
-                Thread.sleep(5000); // Espera 5 segundos
+                Thread.sleep(5000);
 
                 String queryToSend = null;
                 int version = db.getVersaoBD();
 
-                // Se houver uma query pendente (Heartbeat de Escrita)
                 if (pendingQuery != null) {
                     queryToSend = pendingQuery;
                     version = pendingVersion;
-                    // Reset para o próximo Heartbeat
                     pendingQuery = null;
                     pendingVersion = -1;
                 }
@@ -76,11 +70,13 @@ public class HeartbeatSender implements Runnable {
                     socketDir.receive(responsePacket);
                     processarRespostaDiretoria(responsePacket, socketDir); // Processa a resposta
                 } catch (SocketTimeoutException e) {
-                    System.out.println("[HeartbeatSender] Timeout ao esperar resposta da Diretoria (esperado).");
+                    // Timeout esperado se a Diretoria estiver ocupada.
                 }
 
-                // 3. Envio para o Cluster (UDP Multicast) - Apenas se formos o Principal ou Backup
-                enviarMulticast(data);
+                // 3. Envio para o Cluster (UDP Multicast) - SÓ SE SOMOS PRINCIPAL
+                if (this.isPrincipal) {
+                    enviarMulticast(data);
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -93,34 +89,28 @@ public class HeartbeatSender implements Runnable {
         try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()))) {
             MsgRespostaDiretoria resposta = (MsgRespostaDiretoria) ois.readObject();
 
-            if (!servidor.isPrincipal()) { // Se o servidor atual é um Backup
+            // 1. Verificar se a Diretoria nos indica como o NOVO Principal
+            boolean somosONovoPrincipal =
+                    resposta.existeServidor() &&
+                            resposta.getIpServidorPrincipal().equals(servidor.getIPLocal()) &&
+                            resposta.getPortoClienteTCP() == servidor.getPortoClienteTCP();
 
-                // 1. Verificar se a Diretoria nos indica como o NOVO Principal
-                boolean somosONovoPrincipal =
-                        resposta.getIpServidorPrincipal().equals(servidor.getIPLocal()) &&
-                                resposta.getPortoClienteTCP() == servidor.getPortoClienteTCP();
-
-                if (somosONovoPrincipal) {
-                    // 2. Disparar a Ativação do Serviço (Mudar o papel)
-                    System.out.println("[HeartbeatSender] PROMOÇÃO DETETADA PELA DIRETORIA. Ativando serviços...");
-                    servidor.ativarServicosPrincipal();
-                }
+            if (!servidor.isPrincipal() && somosONovoPrincipal) {
+                servidor.ativarServicosPrincipal();
             }
         } catch (Exception e) {
             System.err.println("[HeartbeatSender] Erro ao processar resposta da Diretoria: " + e.getMessage());
         }
     }
 
-
     private void enviarMulticast(byte[] data) {
         try (MulticastSocket socketMulti = new MulticastSocket()) {
-            InetAddress group = InetAddress.getByName("230.30.30.30"); // Endereço fixo
+            InetAddress group = InetAddress.getByName("230.30.30.30");
 
-            // Requisito: Ligação Multicast através da interface local
             NetworkInterface nif = NetworkInterface.getByInetAddress(ipLocal);
             socketMulti.setNetworkInterface(nif);
 
-            DatagramPacket packet = new DatagramPacket(data, data.length, group, 3030); // Porto fixo
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, 3030);
             socketMulti.send(packet);
         } catch (IOException e) {
             System.err.println("[HeartbeatSender] Falha no envio Multicast: " + e.getMessage());

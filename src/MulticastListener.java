@@ -11,6 +11,11 @@ public class MulticastListener implements Runnable {
     private final String ipMulticast;
     private final InetAddress ipLocal;
 
+    private volatile boolean running = true;
+    private MulticastSocket socket;
+    private InetAddress group;
+    private NetworkInterface nif;
+
     // Construtor
     public MulticastListener(Servidor s, DatabaseManager db, String ipMulti, InetAddress ipLocal) {
         this.servidor = s;
@@ -21,9 +26,10 @@ public class MulticastListener implements Runnable {
 
     @Override
     public void run() {
-        try (MulticastSocket socket = new MulticastSocket(3030)) {
-            InetAddress group = InetAddress.getByName("230.30.30.30");
-            NetworkInterface nif = NetworkInterface.getByInetAddress(ipLocal);
+        try {
+            this.socket = new MulticastSocket(3030);
+            this.group = InetAddress.getByName("230.30.30.30");
+            this.nif = NetworkInterface.getByInetAddress(ipLocal);
 
             // Junta-se ao grupo Multicast
             socket.joinGroup(new InetSocketAddress(group, 3030), nif);
@@ -32,7 +38,7 @@ public class MulticastListener implements Runnable {
 
             System.out.println("[MulticastListener] A escutar por Heartbeats em 230.30.30.30:3030");
 
-            while (true) {
+            while (running) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
 
@@ -78,6 +84,17 @@ public class MulticastListener implements Runnable {
             }
         } catch (IOException e) {
             System.err.println("[MulticastListener] Erro fatal no Socket Multicast: " + e.getMessage());
+        } finally {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        }
+    }
+
+    public void stop() {
+        this.running = false;
+        if (socket != null && !socket.isClosed()) {
+            socket.close();
         }
     }
 }

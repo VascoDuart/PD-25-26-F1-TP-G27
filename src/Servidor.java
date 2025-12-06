@@ -21,6 +21,8 @@ public class Servidor implements ServerAPI {
 
     private DatabaseManager db;
     private HeartbeatSender heartbeatSender;
+    private MulticastListener multicastListener; // Variável para controlar a thread Multicast
+
     private final List<ClientHandler> clientesConectados = Collections.synchronizedList(new ArrayList<>());
     private final Object BD_LOCK = new Object();
 
@@ -63,24 +65,29 @@ public class Servidor implements ServerAPI {
                 }
 
                 // 4. Determinar se somos o Principal
-                // Comparar o nosso porto TCP com o porto do Principal fornecido pela Diretoria.
                 this.isPrincipal = (resposta.getPortoClienteTCP() == this.portoClienteTCP);
 
-                // 5. Iniciar Threads
+                // 5. Iniciar Threads - ORDEM CRÍTICA
 
-                // Thread principal: envia Heartbeats periódicos e de escrita (todos os modos)
+                // Thread 1: Heartbeat (inicia o papel inicial - Principal ou Backup)
                 this.heartbeatSender = new HeartbeatSender(this, db, ipDiretorio, portoDiretorio, portoClienteTCP, portoBDT_TCP, ipLocal);
+                this.heartbeatSender.updateRole(this.isPrincipal); // Determina o papel inicial
                 new Thread(this.heartbeatSender).start();
 
-                // Thread de escuta: monitoriza o Multicast (todos os modos)
-                new Thread(new MulticastListener(this, db, ipMulticast, ipLocal)).start();
+                // Thread 2: Multicast Listener (todos escutam)
+                this.multicastListener = new MulticastListener(this, db, ipMulticast, ipLocal);
+                new Thread(this.multicastListener).start();
 
+                // Thread 3 & 4: Aceitação de Conexões TCP (devem estar sempre a correr)
+                aceitarPedidosBD();
+                aceitarClientes();
+
+                // 6. LOGS
                 if (this.isPrincipal) {
                     System.out.println("[Servidor] >>> MODO PRINCIPAL <<<");
-                    aceitarPedidosBD();
-                    aceitarClientes();
                 } else {
                     System.out.println("[Servidor] >>> MODO BACKUP <<<");
+                    // 7. Se for Backup, recebe cópia da BD e fica em espera.
                     receberCopiaBD(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
                 }
 
@@ -111,21 +118,43 @@ public class Servidor implements ServerAPI {
         return this.portoClienteTCP;
     }
 
+    /**
+     * Rotina crítica para promover o servidor Backup a Principal (Handover).
+     * Chamada pelo HeartbeatSender quando a Diretoria confirma a promoção.
+     */
     public synchronized void ativarServicosPrincipal() {
         if (this.isPrincipal) return;
 
         this.isPrincipal = true;
-        System.out.println("[Servidor] PROMOVIDO A PRINCIPAL. Iniciando escuta...");
+        System.out.println("\n\n************************************************");
+        System.out.println("[Servidor] >>> PROMOVIDO A PRINCIPAL <<< ");
+        System.out.println("************************************************\n");
 
-        aceitarPedidosBD();
-        aceitarClientes();
+        // 1. OBRIGATÓRIO: PARAR A THREAD DE ESCUTA MULTICAST (REPLICAÇÃO DE BACKUP)
+        // Isto impede que o novo Principal se torne instável ao receber updates antigos.
+        if (this.multicastListener != null) {
+            this.multicastListener.stop();
+            this.multicastListener = null;
+            System.out.println("[Servidor] Multicast Listener (Replicação) parado.");
+        }
 
-        notificarTodosClientes("Servico Principal restabelecido.");
+        // 2. ATUALIZAR HEARTBEAT SENDER
+        // O HeartbeatSender deve agora enviar Heartbeats como Principal.
+        if (this.heartbeatSender != null) {
+            this.heartbeatSender.updateRole(true);
+            System.out.println("[Servidor] Heartbeat Sender atualizado para Principal.");
+        }
+
+        // 3. ATIVAÇÃO DE SERVIÇOS TCP: O flag 'isPrincipal = true' desbloqueia os ClientHandlers.
+        notificarTodosClientes("Serviço Principal restabelecido.");
     }
 
     private void fecharRecursos() {
         if (heartbeatSender != null) {
             heartbeatSender.stop(); // Interrompe a thread Heartbeat
+        }
+        if (multicastListener != null) {
+            multicastListener.stop(); // Encerra a escuta Multicast
         }
         try { srvSocketClientes.close(); } catch (Exception e) {}
         try { srvSocketDB.close(); } catch (Exception e) {}
@@ -246,33 +275,26 @@ public class Servidor implements ServerAPI {
     }
 
     // --- IMPLEMENTAÇÃO DA INTERFACE ServerAPI ---
-
-    // Usado pelo ClientHandler após uma escrita (INSERT/UPDATE) na BD.
     @Override
     public void publicarAlteracao(String querySQL, int novaVersao) {
         if (!this.isPrincipal) {
-            // Um Servidor Backup não pode alterar a BD nem publicar Heartbeats de escrita.
             System.err.println("[Heartbeat] ERRO: Servidor Backup tentou publicar alteração.");
             return;
         }
 
-        // Disparar o Heartbeat de escrita imediatamente
         if (heartbeatSender != null) {
             heartbeatSender.dispararHeartbeatEscrita(querySQL, novaVersao);
         }
     }
 
-    // Usado pelo ClientHandler para notificar outros clientes de eventos.
     @Override
     public void notificarTodosClientes(String mensagem) {
-        // Envia a notificação para todos os clientes ativos.
         clientesConectados.removeIf(handler -> {
-            // Assume-se que o ClientHandler tem o método getUserEmail() e enviarNotificacao(String)
             if (handler.enviarNotificacao(mensagem)) {
-                return false; // Manter na lista
+                return false;
             } else {
                 System.out.println("[Notificacao] Cliente desconectado durante notificação.");
-                return true; // Remover da lista
+                return true;
             }
         });
     }

@@ -167,31 +167,39 @@ public class ClientHandler implements Runnable {
     }
 
     private void processarRegisto(MsgRegisto msg) throws IOException {
-        String resposta = "ERRO: Falha no registo.";
+        String resposta = "ERRO: Falha desconhecida no registo.";
 
         synchronized (serverAPI.getBDLock()) {
-            if (msg.isDocente()) {
-                if (!dbManager.validarCodigoDocente(msg.getCodigoDocente())) {
-                    resposta = "ERRO: Código de docente inválido.";
-                } else {
-                    String querySql = dbManager.registarDocente(msg.getDocente());
+            try {
+                if (msg.isDocente()) {
+                    if (!dbManager.validarCodigoDocente(msg.getCodigoDocente())) {
+                        resposta = "ERRO: Código de docente inválido.";
+                    } else {
+                        String querySql = dbManager.registarDocente(msg.getDocente());
+                        if (querySql != null) {
+                            resposta = "SUCESSO: Docente registado!";
+                            serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+                        } else {
+                            resposta = "ERRO: Docente ja registado ou email duplicado."; // FALHA NO registarDocente
+                        }
+                    }
+                } else if (msg.isEstudante()) {
+                    String querySql = dbManager.registarEstudante(msg.getEstudante());
                     if (querySql != null) {
-                        resposta = "SUCESSO: Docente registado!";
+                        resposta = "SUCESSO: Estudante registado!";
                         serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
                     } else {
-                        resposta = "ERRO: Docente ja registado ou email duplicado.";
+                        resposta = "ERRO: Dados inválidos ou duplicados (email/número)."; // FALHA NO registarEstudante
                     }
                 }
-            } else if (msg.isEstudante()) {
-                String querySql = dbManager.registarEstudante(msg.getEstudante());
-                if (querySql != null) {
-                    resposta = "SUCESSO: Estudante registado!";
-                    serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
-                } else {
-                    resposta = "ERRO: Dados inválidos ou duplicados.";
-                }
+            } catch (Exception e) {
+                // Se qualquer coisa falhar (SQL, Hash, etc.)
+                System.err.println("[Handler] Erro de BD/Lógica no registo: " + e.getMessage());
+                e.printStackTrace();
+                resposta = "ERRO: Falha de servidor ao processar registo. Tente de novo.";
             }
         }
+        // GARANTIA DE RESPOSTA:
         enviarObjeto(resposta);
     }
 
