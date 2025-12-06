@@ -86,7 +86,7 @@ public class CenaDocente {
             }
         });
 
-        btnPerfil.setOnAction(e -> mostrarAlerta("Editar Perfil", "Funcionalidade em desenvolvimento.\n(Brevemente disponível)"));
+        btnPerfil.setOnAction(e -> abrirJanelaEditarPerfil());
 
         btnSair.setOnAction(e -> app.mostrarLogin());
 
@@ -352,5 +352,75 @@ public class CenaDocente {
 
     interface CallbackLista {
         void executar(List<Pergunta> lista);
+    }
+
+    private void abrirJanelaEditarPerfil() {
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle("Editar Perfil de Docente");
+
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(20));
+        layout.setAlignment(Pos.CENTER);
+
+        // Campos de entrada
+        TextField txtNome = new TextField();
+        txtNome.setPromptText("Novo Nome");
+
+        PasswordField txtPass = new PasswordField();
+        txtPass.setPromptText("Nova Password");
+
+        // Opcional: Para docente, pode ser o código institucional, mas o backend não precisa
+        // dele para a edição (usa o email da sessão). Vamos usar um campo dummy.
+        TextField txtCodDocente = new TextField();
+        txtCodDocente.setPromptText("Código Institucional (Manter o atual)");
+
+        Label lblStatus = new Label("");
+
+        Button btnSalvar = new Button("Salvar Alterações");
+        btnSalvar.setStyle("-fx-base: #FF9800; -fx-text-fill: white;");
+
+        btnSalvar.setOnAction(e -> {
+            // Obter os valores (Docente usa o email atual guardado na sessão do handler)
+            String novoNome = txtNome.getText().trim();
+            String novaPass = txtPass.getText().trim();
+
+            // O backend espera um objeto Docente. Usamos um email dummy, pois o Handler usa o userEmail.
+            Docente d = new Docente(novoNome, "dummy@email.com", novaPass);
+
+            // Enviamos o MsgEditarPerfil usando o construtor de Docente
+            new Thread(() -> {
+                try {
+                    Object respObj = rede.enviarEReceber(new MsgEditarPerfil(d));
+                    String resp = (String) respObj;
+
+                    Platform.runLater(() -> {
+                        lblStatus.setText(resp);
+                        if (resp.contains("SUCESSO")) {
+                            mostrarAlerta("Edição de Perfil", "Perfil atualizado com sucesso.");
+                            dialog.close();
+                        } else {
+                            mostrarAlerta("Erro", resp);
+                        }
+                    });
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    Platform.runLater(() -> lblStatus.setText("Erro de comunicação: " + ex.getMessage()));
+                }
+            }).start();
+        });
+
+        layout.getChildren().addAll(
+                new Label("EDITAR PERFIL DOCENTE"),
+                txtNome,
+                txtPass,
+                txtCodDocente,
+                btnSalvar,
+                lblStatus
+        );
+
+        Scene scene = new Scene(layout, 350, 300);
+        dialog.setScene(scene);
+        dialog.show();
     }
 }

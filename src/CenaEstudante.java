@@ -8,6 +8,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+import javafx.stage.Modality;
 
 import java.util.List;
 
@@ -50,7 +53,7 @@ public class CenaEstudante {
         btnHistorico.setOnAction(e -> mostrarEcraHistorico());
 
         // Ação do Editar Perfil (Dummy)
-        btnPerfil.setOnAction(e -> mostrarAlerta("Editar Perfil", "Funcionalidade em desenvolvimento.\n(Brevemente disponível)"));
+        btnPerfil.setOnAction(e -> abrirJanelaEditarPerfilEstudante());
 
         btnSair.setOnAction(e -> {
             // Tenta avisar o servidor que vai sair
@@ -246,5 +249,76 @@ public class CenaEstudante {
         alert.setHeaderText(null);
         alert.setContentText(msg);
         alert.showAndWait();
+    }
+
+    private void abrirJanelaEditarPerfilEstudante() {
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle("Editar Perfil de Estudante");
+
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(20));
+        layout.setAlignment(Pos.CENTER);
+
+        TextField txtNome = new TextField();
+        txtNome.setPromptText("Novo Nome");
+
+        PasswordField txtPass = new PasswordField();
+        txtPass.setPromptText("Nova Password");
+
+        TextField txtNumEstudante = new TextField();
+        txtNumEstudante.setPromptText("Novo Nº Estudante (Obrigatório)");
+
+        Label lblStatus = new Label("");
+
+        Button btnSalvar = new Button("Salvar Alterações");
+        btnSalvar.setStyle("-fx-base: #4CAF50; -fx-text-fill: white;");
+
+        btnSalvar.setOnAction(e -> {
+            String novoNome = txtNome.getText().trim();
+            String novaPass = txtPass.getText().trim();
+            String novoNum = txtNumEstudante.getText().trim();
+
+            if (novoNum.isEmpty()) {
+                lblStatus.setText("ERRO: O Nº Estudante é obrigatório."); return;
+            }
+
+            // O backend espera um objeto Estudante. Usamos um email dummy.
+            Estudante est = new Estudante(novoNum, novoNome, "dummy@email.com", novaPass);
+
+            // Enviamos o MsgEditarPerfil usando o construtor de Estudante
+            new Thread(() -> {
+                try {
+                    Object respObj = rede.enviarEReceber(new MsgEditarPerfil(est));
+                    String resp = (String) respObj;
+
+                    Platform.runLater(() -> {
+                        lblStatus.setText(resp);
+                        if (resp.contains("SUCESSO")) {
+                            mostrarAlerta("Edição de Perfil", "Perfil atualizado com sucesso.");
+                            dialog.close();
+                        } else {
+                            mostrarAlerta("Erro", resp);
+                        }
+                    });
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    Platform.runLater(() -> lblStatus.setText("Erro de comunicação: " + ex.getMessage()));
+                }
+            }).start();
+        });
+
+        layout.getChildren().addAll(
+                new Label("EDITAR PERFIL ESTUDANTE"),
+                txtNome,
+                txtPass,
+                txtNumEstudante,
+                btnSalvar,
+                lblStatus
+        );
+
+        Scene scene = new Scene(layout, 350, 300);
+        dialog.setScene(scene);
+        dialog.show();
     }
 }
