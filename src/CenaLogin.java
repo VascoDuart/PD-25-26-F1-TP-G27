@@ -56,7 +56,6 @@ public class CenaLogin {
                     Platform.runLater(() -> {
                         lblStatus.setText("Conectado!");
                         lblStatus.setTextFill(Color.GREEN);
-                        btnConectar.setDisable(true);
                     });
                 } catch (Exception ex) {
                     Platform.runLater(() -> lblStatus.setText("Erro: " + ex.getMessage()));
