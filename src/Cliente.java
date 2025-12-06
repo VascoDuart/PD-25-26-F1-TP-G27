@@ -185,7 +185,7 @@ public class Cliente {
                 coms.enviar(vista.formCriarPergunta());
                 vista.mostrarMensagem((String) coms.receber());
             }
-            else if (op == 2) { // CONSULTAR
+            else if (op == 2) { // CONSULTAR PERGUNTAS
                 String filtro = vista.escolherFiltro();
                 coms.enviar(new MsgObterPerguntas(filtro));
 
@@ -222,10 +222,9 @@ public class Cliente {
                     vista.mostrarMensagem((String) coms.receber());
                 }
             }
-            else if (op == 5) { // ESTATÍSTICAS
+            else if (op == 5) { // VER ESTATÍSTICAS
                 String codigo = vista.lerTexto("Código da pergunta: ");
                 coms.enviar(new MsgObterEstatisticas(codigo));
-                // Estatísticas devolve sempre String (ou a stats ou a mensagem de erro)
                 vista.mostrarMensagem((String) coms.receber());
             }
             else if (op == 6) { // EXPORTAR CSV
@@ -233,7 +232,7 @@ public class Cliente {
                 Pergunta pCompleta = null;
                 List<RespostaEstudante> respostas = null;
 
-                // --- 1. PEDIR PERGUNTA (Pode devolver Pergunta ou String de ERRO) ---
+                // 1. PEDIR PERGUNTA
                 coms.enviar(new MsgObterPergunta(codigo));
                 Object respP = coms.receber();
 
@@ -241,11 +240,10 @@ public class Cliente {
                     pCompleta = (Pergunta) respP;
                 } else {
                     vista.mostrarErro("Falha ao obter Pergunta (Causa: " + respP + ").");
-                    return; // Sai da rotina de exportação.
+                    return;
                 }
 
-                // --- 2. PEDIR RESPOSTAS (Pode devolver List<RespostaEstudante> ou String de ERRO) ---
-                // O ClientHandler fará a validação final (expirada, etc.).
+                // 2. PEDIR RESPOSTAS
                 coms.enviar(new MsgObterRespostas(codigo));
                 Object respR = coms.receber();
 
@@ -257,7 +255,7 @@ public class Cliente {
                     return;
                 }
 
-                // --- 3. EXPORTAR ---
+                // 3. EXPORTAR
                 if (pCompleta != null && respostas != null) {
                     String nomeFicheiro = "resultados_" + codigo + ".csv";
                     ExportadorCSV.exportar(nomeFicheiro, pCompleta, respostas);
@@ -265,6 +263,12 @@ public class Cliente {
                 } else {
                     vista.mostrarErro("Dados de exportação incompletos.");
                 }
+            }
+            else if (op == 7) { // EDITAR PERFIL DOCENTE
+                // 1 indica Docente. O email atual está em 'ultimoEmail'.
+                MsgEditarPerfil msg = vista.formEditarPerfil(1, ultimoEmail);
+                coms.enviar(msg);
+                vista.mostrarMensagem((String) coms.receber());
             }
             else if (op == 0) { // LOGOUT
                 try {
@@ -311,6 +315,12 @@ public class Cliente {
                         }
                     }
                 }
+            }
+            else if (op == 3) { // EDITAR PERFIL ESTUDANTE
+                // 2 indica Estudante. O email atual está em 'ultimoEmail'.
+                MsgEditarPerfil msg = vista.formEditarPerfil(2, ultimoEmail);
+                coms.enviar(msg);
+                vista.mostrarMensagem((String) coms.receber());
             }
             else if (op == 0) {
                 try {

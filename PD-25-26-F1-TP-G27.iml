@@ -38,6 +38,6 @@
     <orderEntry type="library" name="slf4j-simple-1.7.36" level="project" />
     <orderEntry type="library" name="sqlite-jdbc-3.46.0.0" level="project" />
     <orderEntry type="library" name="PAJavaFX" level="application" />
-    <orderEntry type="library" name="javafx-swt" level="project" />
+    <orderEntry type="library" name="lib" level="application" />
   </component>
 </module>

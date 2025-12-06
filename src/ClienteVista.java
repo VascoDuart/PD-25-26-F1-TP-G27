@@ -59,6 +59,7 @@ public class ClienteVista {
         System.out.println("4. Eliminar Pergunta");
         System.out.println("5. Ver Estatísticas");
         System.out.println("6. Exportar CSV");
+        System.out.println("7. Editar Perfil");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }
@@ -67,6 +68,7 @@ public class ClienteVista {
         System.out.println("\n=== ESTUDANTE ===");
         System.out.println("1. Responder a Pergunta");
         System.out.println("2. Ver Histórico");
+        System.out.println("3. Editar Perfil");
         System.out.println("0. Logout");
         return lerInteiro("Opção: ");
     }
@@ -117,5 +119,28 @@ public class ClienteVista {
             System.out.println(o.getLetra() + ") " + o.getTexto());
         }
         return lerTexto("Sua resposta (letra): ");
+    }
+
+    public MsgEditarPerfil formEditarPerfil(int tipoUtilizador, String emailAtual) {
+        System.out.println("\n--- EDIÇÃO DE PERFIL ---");
+        String novoNome = lerTexto("Novo Nome: ");
+        String novaPass = lerTexto("Nova Password: "); // Senha deve ser alterada
+
+        // Se a password ou nome for vazio, mantém a lógica atual. Aqui assumimos que o utilizador
+        // está a fornecer valores que substituirão os antigos, ou a repeti-los se não for para alterar.
+        if (novoNome.isEmpty()) novoNome = "NAO_ALTERAR";
+        if (novaPass.isEmpty()) novaPass = "NAO_ALTERAR";
+
+        if (tipoUtilizador == 1) { // Docente
+            // No Docente, não há campo extra (Nº Estudante), usamos placeholder para o email
+            Docente d = new Docente(novoNome, emailAtual, novaPass);
+            return new MsgEditarPerfil(d);
+        } else { // Estudante
+            String novoNumEstudante = lerTexto("Novo Nº Estudante: ");
+            if (novoNumEstudante.isEmpty()) novoNumEstudante = "NAO_ALTERAR";
+
+            Estudante e = new Estudante(novoNumEstudante, novoNome, emailAtual, novaPass);
+            return new MsgEditarPerfil(e);
+        }
     }
 }

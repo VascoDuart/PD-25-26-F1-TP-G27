@@ -184,6 +184,30 @@ public class DatabaseManager {
         }
     }
 
+    // --- NOVO: EDIÇÃO DE PERFIL DOCENTE ---
+    public synchronized String editarDocente(String emailAntigo, String novoNome, String novaPass) {
+        String passHash = hashPassword(novaPass);
+        String sql = "UPDATE Docente SET nome = ?, password = ? WHERE email = ?";
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, novoNome);
+            pstmt.setString(2, passHash);
+            pstmt.setString(3, emailAntigo);
+            int rows = pstmt.executeUpdate();
+
+            if (rows > 0) {
+                incrementarVersao();
+                System.out.println("[BD] Docente editado: " + emailAntigo);
+                return String.format("UPDATE Docente SET nome='%s', password='%s' WHERE email='%s'",
+                        novoNome, passHash, emailAntigo);
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao editar docente: " + e.getMessage());
+        }
+        return null;
+    }
+    // --- FIM NOVO ---
+
     public synchronized String registarEstudante(Estudante e) {
         String sql = "INSERT INTO Estudante(numero_estudante, nome, email, password) VALUES(?,?,?,?)";
         String passHash = hashPassword(e.getPassword());
@@ -206,6 +230,33 @@ public class DatabaseManager {
             return null;
         }
     }
+
+    // --- NOVO: EDIÇÃO DE PERFIL ESTUDANTE ---
+    public synchronized String editarEstudante(String emailAntigo, String novoNum, String novoNome, String novaPass) {
+        String passHash = hashPassword(novaPass);
+        // Usamos o email (chave de sessão) e atualizamos os campos
+        String sql = "UPDATE Estudante SET numero_estudante = ?, nome = ?, password = ? WHERE email = ?";
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, novoNum);
+            pstmt.setString(2, novoNome);
+            pstmt.setString(3, passHash);
+            pstmt.setString(4, emailAntigo);
+            int rows = pstmt.executeUpdate();
+
+            if (rows > 0) {
+                incrementarVersao();
+                System.out.println("[BD] Estudante editado: " + emailAntigo);
+                return String.format("UPDATE Estudante SET numero_estudante='%s', nome='%s', password='%s' WHERE email='%s'",
+                        novoNum, novoNome, passHash, emailAntigo);
+            }
+        } catch (SQLException e) {
+            System.err.println("[BD] Erro ao editar estudante: " + e.getMessage());
+        }
+        return null;
+    }
+    // --- FIM NOVO ---
+
 
     public synchronized boolean autenticarDocente(String email, String password) {
         String sql = "SELECT password FROM Docente WHERE email = ?";

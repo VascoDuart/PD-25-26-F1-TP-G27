@@ -88,6 +88,8 @@ public class ClientHandler implements Runnable {
                                 processarObterEstatisticas((MsgObterEstatisticas) msg);
                             } else if (msg instanceof MsgObterPergunta) { // Adicionado para Docente
                                 processarObterPergunta((MsgObterPergunta) msg);
+                            } else if (msg instanceof MsgEditarPerfil) { // NOVO
+                                processarEditarPerfil((MsgEditarPerfil) msg);
                             }
 
                         } else if (estadoLogin == ESTADO_ESTUDANTE) {
@@ -98,6 +100,8 @@ public class ClientHandler implements Runnable {
                             } else if (msg instanceof MsgObterHistorico) {
                                 List<HistoricoItem> historico = dbManager.obterHistoricoEstudante(userId);
                                 enviarObjeto(historico);
+                            } else if (msg instanceof MsgEditarPerfil) { // NOVO
+                                processarEditarPerfil((MsgEditarPerfil) msg);
                             }
                         }
                     } catch (Exception e) {
@@ -143,8 +147,6 @@ public class ClientHandler implements Runnable {
     }
 
     // --- PROCESSAMENTO DE MENSAGENS DE LÓGICA DE NEGÓCIO ---
-
-    // ... (processarRegisto, processarLogin, processarCriarPergunta - sem alteração na lógica interna)
 
     private void processarLogin(MsgLogin msg) throws IOException {
         if (dbManager.autenticarDocente(msg.getEmail(), msg.getPassword())) {
@@ -192,6 +194,33 @@ public class ClientHandler implements Runnable {
         }
         enviarObjeto(resposta);
     }
+
+    // --- NOVO: PROCESSAR EDIÇÃO DE PERFIL ---
+    private void processarEditarPerfil(MsgEditarPerfil msg) throws IOException {
+        String resposta = "ERRO: Não foi possível editar o perfil.";
+        String querySql = null;
+
+        synchronized (serverAPI.getBDLock()) {
+            if (msg.isDocente() && estadoLogin == ESTADO_DOCENTE) {
+                Docente d = msg.getNovoDocente();
+                // userEmail é o email antigo, usado como chave para o UPDATE
+                querySql = dbManager.editarDocente(userEmail, d.getNome(), d.getPassword());
+            } else if (msg.isEstudante() && estadoLogin == ESTADO_ESTUDANTE) {
+                Estudante e = msg.getNovoEstudante();
+                // O email é a chave; novoNum e novoNome são os dados a atualizar
+                querySql = dbManager.editarEstudante(userEmail, e.getNumEstudante(), e.getNome(), e.getPassword());
+            }
+
+            if (querySql != null) {
+                resposta = "SUCESSO: Perfil atualizado.";
+                serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+            } else {
+                resposta = "ERRO: Falha na base de dados ou dados duplicados.";
+            }
+        }
+        enviarObjeto(resposta);
+    }
+    // --- FIM NOVO ---
 
     private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String resposta = "ERRO: Falha na BD.";
@@ -251,12 +280,18 @@ public class ClientHandler implements Runnable {
         // A VALIDAÇÃO DE isPerguntaAtiva deve ser feita no DatabaseManager antes de inserir.
 
         synchronized (serverAPI.getBDLock()) {
-            // NOTA: A validação isPerguntaAtiva está no dbManager.registarResposta
-            String querySql = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
+            // Verifica se a pergunta está ATIVA antes de tentar registar
+            if (!dbManager.isPerguntaAtiva(msg.getCodigoAcesso())) {
+                resposta = "ERRO: Pergunta não está ativa.";
+            } else {
+                String querySql = dbManager.registarResposta(userId, msg.getCodigoAcesso(), msg.getLetraOpcao());
 
-            if (querySql != null) {
-                resposta = "SUCESSO: Resposta guardada.";
-                serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+                if (querySql != null) {
+                    resposta = "SUCESSO: Resposta guardada.";
+                    serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
+                } else {
+                    resposta = "ERRO: Já respondeste a esta pergunta.";
+                }
             }
         }
         enviarObjeto(resposta);
