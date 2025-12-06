@@ -49,7 +49,7 @@ A API é baseada em recursos (Substantivos) e utiliza os verbos HTTP para as aç
     }
     ```
 
-#### 2.2.2 Obter Pergunta Ativa (`GET /api/perguntas/{codigo_acesso}`)
+#### 2.2.2 Obter pt.isec.pd.tp.estruturas.Pergunta Ativa (`GET /api/perguntas/{codigo_acesso}`)
 * **Headers:** `Authorization: Bearer <token>`
 * **Response Body (200 OK):**
     ```json
