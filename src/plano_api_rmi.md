@@ -1,4 +1,4 @@
-# PLANEAMENTO DE EXPANSÃO (SEÇÃO 5) - INTERAÇÃO COM ESTUDANTES
+# PLANEAMENTO DE EXPANSÃO - INTERAÇÃO COM ESTUDANTES
 
 Este documento define o design da API REST e da Interface RMI para futuras aplicações cliente destinadas aos estudantes, cobrindo os requisitos de autenticação por token.
 
@@ -57,9 +57,9 @@ A API é baseada em recursos (Substantivos) e utiliza os verbos HTTP para as aç
       "accessCode": "A1B2C3",
       "text": "Qual é a capital de Portugal?",
       "options": [
-        { "letter": "A", "text": "London" },
+        { "letter": "A", "text": "Coimbra" },
         { "letter": "B", "text": "Porto" },
-        { "letter": "C", "text": "Lisbon" }
+        { "letter": "C", "text": "Lisboa" }
       ]
     }
     ```
@@ -97,50 +97,17 @@ import java.util.List;
 
 public interface StudentService extends Remote {
 
-    // --- MÉTODOS PÚBLICOS ---
-
-    /**
-     * Autentica o estudante e devolve o token de acesso.
-     * @return O token de acesso (String) a ser usado em chamadas subsequentes.
-     */
     String login(String email, String password) throws RemoteException;
 
-    /**
-     * Regista um novo estudante (Acesso público).
-     */
     void register(String studentNumber, String name, String email, String password) throws RemoteException;
 
-    // --- MÉTODOS PROTEGIDOS (REQUEREM TOKEN) ---
-
-    /**
-     * Invalida o token atual.
-     * @param token O token de autenticação (1º parâmetro obrigatório).
-     */
     void logout(String token) throws RemoteException; 
 
-    /**
-     * Atualiza o perfil do estudante.
-     * @param token O token de autenticação.
-     */
     void updateProfile(String token, String name, String password) throws RemoteException;
 
-    /**
-     * Obtém uma pergunta ativa.
-     * @param token O token de autenticação.
-     * @return Objeto com detalhes da pergunta e opções (QuestionDTO).
-     */
     Object getQuestion(String token, String accessCode) throws RemoteException;
 
-    /**
-     * Submete uma resposta.
-     * @param token O token de autenticação.
-     */
     void submitAnswer(String token, String accessCode, String selectedOption) throws RemoteException;
 
-    /**
-     * Consulta o histórico de respostas do estudante.
-     * @param token O token de autenticação.
-     * @return Lista de DTOs com detalhes das respostas (AnswerDTO).
-     */
     List<Object> getAnswers(String token) throws RemoteException;
 }
