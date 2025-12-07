@@ -6,11 +6,11 @@ import pt.isec.pd.tp.estruturas.Estudante;
 public class MsgEditarPerfil extends Mensagem {
     private static final long serialVersionUID = 1L;
 
-    // Apenas um será preenchido
+
     private final Docente novoDocente;
     private final Estudante novoEstudante;
 
-    // Usamos o objeto pt.isec.pd.tp.bases.Docente/pt.isec.pd.tp.bases.Estudante (com os novos dados) e não apenas campos soltos.
+
     public MsgEditarPerfil(Docente novoDocente) {
         this.novoDocente = novoDocente;
         this.novoEstudante = null;

@@ -3,9 +3,9 @@ package pt.isec.pd.tp.mensagens;
 public class MsgResponderPergunta extends Mensagem {
     private static final long serialVersionUID = 1L;
 
-    private final int estudanteId; // Quem responde
-    private final String codigoAcesso; // A que pergunta
-    private final String letraOpcao; // O que escolheu
+    private final int estudanteId;
+    private final String codigoAcesso;
+    private final String letraOpcao;
 
     public MsgResponderPergunta(int estudanteId, String codigoAcesso, String letraOpcao) {
         this.estudanteId = estudanteId;

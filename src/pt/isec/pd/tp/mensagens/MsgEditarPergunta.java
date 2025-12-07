@@ -7,8 +7,7 @@ public class MsgEditarPergunta extends Mensagem {
     private final String novoEnunciado;
     private final String novoInicio;
     private final String novoFim;
-    // Nota: Editar opções é complexo em SQL puro, por isso focamo-nos nos dados principais
-    // conforme é comum nesta fase do trabalho.
+
 
     public MsgEditarPergunta(String codigo, String enunc, String ini, String fim) {
         this.codigoAcesso = codigo;

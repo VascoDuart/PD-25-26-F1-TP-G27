@@ -26,10 +26,10 @@ public class CenaLogin {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        // --- ABA LOGIN ---
+
         Tab tabLogin = new Tab("Login", construirFormLogin());
 
-        // --- ABA REGISTO ---
+
         Tab tabRegisto = new Tab("Registar", construirFormRegisto());
 
         tabPane.getTabs().addAll(tabLogin, tabRegisto);
@@ -50,7 +50,7 @@ public class CenaLogin {
         lblStatus = new Label("Desconectado");
         lblStatus.setTextFill(Color.RED);
 
-        // Ação Conectar
+
         btnConectar.setOnAction(e -> {
             lblStatus.setText("A procurar...");
             new Thread(() -> {
@@ -67,7 +67,7 @@ public class CenaLogin {
             }).start();
         });
 
-        // Ação Login
+
         btnLogin.setOnAction(e -> {
             if (lblStatus.getTextFill() == Color.RED) {
                 lblStatus.setText("Tens de conectar primeiro!"); return;
@@ -108,14 +108,14 @@ public class CenaLogin {
                 System.out.println("[DEBUG GUI] A enviar login para " + email + "...");
                 rede.enviar(new MsgLogin(email, pass));
 
-                // Ler resposta
+
                 Object resposta = rede.enviarEReceber(new MsgLogin(email, pass));
                 String texto = (String) resposta;
 
                 System.out.println("[DEBUG GUI] O Servidor respondeu: " + texto); // <--- ISTO É O IMPORTANTE
 
                 Platform.runLater(() -> {
-                    // Normalizar texto para evitar erros de maiúsculas/minúsculas
+
                     String textoLower = texto.toLowerCase();
 
                     if (textoLower.contains("sucesso") && textoLower.contains("docente")) {
@@ -134,7 +134,7 @@ public class CenaLogin {
                 });
             } catch (Exception ex) {
                 System.err.println("[DEBUG GUI] Erro grave: ");
-                ex.printStackTrace(); // Isto vai mostrar o erro na consola se houver
+                ex.printStackTrace();
                 Platform.runLater(() -> {
                     lblStatus.setText("Erro: " + ex.getMessage());
                     lblStatus.setTextFill(Color.RED);
@@ -144,7 +144,7 @@ public class CenaLogin {
     }
 
     private void fazerRegisto(String tipo, String nome, String email, String pass, String extra) {
-        // 1. Verificação Básica antes de tentar enviar
+
         if (nome.isEmpty() || email.isEmpty() || pass.isEmpty() || extra.isEmpty()) {
             mostrarAlerta("Erro", "Preencha todos os campos!");
             return;
@@ -152,27 +152,27 @@ public class CenaLogin {
 
         new Thread(() -> {
             try {
-                // 2. Criar a mensagem correta
+
                 Object msg;
-                if (tipo == null || tipo.equals("Estudante")) { // Default para pt.isec.pd.tp.bases.Estudante se null
+                if (tipo == null || tipo.equals("Estudante")) {
                     msg = new MsgRegisto(new Estudante(extra, nome, email, pass));
                 } else {
                     msg = new MsgRegisto(new Docente(nome, email, pass), extra);
                 }
 
-                // 3. Tentar Enviar
+
                 System.out.println("[GUI] A enviar registo de " + tipo + "...");
                 rede.enviar(msg);
 
-                // 4. Ler Resposta
+
                 Object resposta = rede.receber();
                 String textoResp = (String) resposta;
 
-                // 5. Mostrar Resultado
+
                 Platform.runLater(() -> mostrarAlerta("Registo", textoResp));
 
             } catch (Exception ex) {
-                // ERRO: Mostra na consola E na janela
+
                 System.err.println("[GUI] Erro no registo: " + ex.getMessage());
                 ex.printStackTrace();
                 Platform.runLater(() -> mostrarAlerta("Erro Crítico", "Falha no registo:\n" + ex.getMessage() + "\n\n(Verifica se clicaste em 'Conectar' primeiro!)"));
@@ -180,7 +180,7 @@ public class CenaLogin {
         }).start();
     }
 
-    // Método auxiliar para mostrar janelas de aviso (se não tiveres, adiciona-o no fim da classe)
+
     private void mostrarAlerta(String titulo, String mensagem) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle(titulo);

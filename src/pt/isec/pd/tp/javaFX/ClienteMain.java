@@ -26,7 +26,7 @@ public class ClienteMain extends Application {
             System.exit(0);
         });
 
-        // Começa no Login
+
         mostrarLogin();
         window.show();
     }
@@ -46,6 +46,6 @@ public class ClienteMain extends Application {
         window.setScene(new Scene(estudante.construir(), 600, 600));
     }
 
-    // Getters úteis
+
     public RedeCliente getRede() { return rede; }
 }

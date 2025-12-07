@@ -62,14 +62,14 @@ public class CenaDocente {
         Button btnSair = new Button("0. Logout");
         btnSair.setStyle(estiloBtn + "-fx-base: #f44336; -fx-text-fill: white;");
 
-        // --- AÇÕES DOS BOTÕES ---
+
 
         btnCriar.setOnAction(e -> abrirJanelaCriarPergunta());
 
         btnListar.setOnAction(e -> {
             String filtro = escolherFiltro();
             if (filtro != null) {
-                // Passamos um callback para saber o que fazer com a lista quando chegar
+
                 enviarPedidoLista(filtro, lista -> mostrarJanelaResultados(lista, filtro));
             }
         });
@@ -100,9 +100,7 @@ public class CenaDocente {
         return layout;
     }
 
-    // ==================================================================================
-    // 1. CRIAR PERGUNTA
-    // ==================================================================================
+
     private void abrirJanelaCriarPergunta() {
         Stage dialog = new Stage();
         dialog.initModality(Modality.APPLICATION_MODAL);
@@ -128,7 +126,7 @@ public class CenaDocente {
             opcoesBox.getChildren().add(linha);
         });
 
-        btnAddOp.fire(); btnAddOp.fire(); // Começa com 2 opções
+        btnAddOp.fire(); btnAddOp.fire();
 
         Button btnEnviar = new Button("Criar");
         btnEnviar.setStyle("-fx-base: #4CAF50; -fx-text-fill: white;");
@@ -145,7 +143,7 @@ public class CenaDocente {
 
             new Thread(() -> {
                 try {
-                    // USA O MÉTODO SEGURO: enviarEReceber
+
                     Object respObj = rede.enviarEReceber(new MsgCriarPergunta(-1, txtEnunc.getText(), txtInicio.getText(), txtFim.getText(), ops));
                     String resp = (String) respObj;
                     Platform.runLater(() -> {
@@ -162,9 +160,7 @@ public class CenaDocente {
         dialog.show();
     }
 
-    // ==================================================================================
-    // 2. CONSULTAR (LISTAR COM FILTRO)
-    // ==================================================================================
+
     private String escolherFiltro() {
         List<String> opcoes = new ArrayList<>();
         opcoes.add("TODAS");
@@ -182,7 +178,7 @@ public class CenaDocente {
     private void enviarPedidoLista(String filtro, CallbackLista callback) {
         new Thread(() -> {
             try {
-                // USA O MÉTODO SEGURO
+
                 Object resp = rede.enviarEReceber(new MsgObterPerguntas(filtro));
 
                 if (resp instanceof List) {
@@ -217,9 +213,7 @@ public class CenaDocente {
         stage.show();
     }
 
-    // ==================================================================================
-    // 3. ESTATÍSTICAS
-    // ==================================================================================
+
     private void abrirSeletorDeEstatisticas() {
         enviarPedidoLista("EXPIRADAS", lista -> {
             if (lista.isEmpty()) {
@@ -265,9 +259,7 @@ public class CenaDocente {
         }).start();
     }
 
-    // ==================================================================================
-    // 4. EDITAR, ELIMINAR, CSV
-    // ==================================================================================
+
 
     private void abrirJanelaEditarPergunta() {
         String codigo = pedirTexto("Editar Pergunta", "Qual o código da pergunta a editar?");
@@ -313,17 +305,17 @@ public class CenaDocente {
     private void acaoExportarCSV(String codigo) {
         new Thread(() -> {
             try {
-                // Passo 1: Pedir pt.isec.pd.tp.bases.Pergunta
+
                 Object respP = rede.enviarEReceber(new MsgObterPergunta(codigo));
 
                 if (respP instanceof Pergunta) {
                     Pergunta p = (Pergunta) respP;
 
-                    // Passo 2: Pedir Respostas
+
                     Object respR = rede.enviarEReceber(new MsgObterRespostas(codigo));
                     List<RespostaEstudante> resps = (List<RespostaEstudante>) respR;
 
-                    // Passo 3: Gerar Ficheiro
+
                     Platform.runLater(() -> {
                         String nomeFicheiro = "resultados_" + codigo + ".csv";
                         ExportadorCSV.exportar(nomeFicheiro, p, resps);
@@ -336,9 +328,7 @@ public class CenaDocente {
         }).start();
     }
 
-    // ==================================================================================
-    // HELPERS
-    // ==================================================================================
+
 
     private String pedirTexto(String titulo, String mensagem) {
         TextInputDialog td = new TextInputDialog();
@@ -376,8 +366,7 @@ public class CenaDocente {
         PasswordField txtPass = new PasswordField();
         txtPass.setPromptText("Nova Password");
 
-        // Opcional: Para docente, pode ser o código institucional, mas o backend não precisa
-        // dele para a edição (usa o email da sessão). Vamos usar um campo dummy.
+
         TextField txtCodDocente = new TextField();
         txtCodDocente.setPromptText("Código Institucional (Manter o atual)");
 
@@ -387,14 +376,14 @@ public class CenaDocente {
         btnSalvar.setStyle("-fx-base: #FF9800; -fx-text-fill: white;");
 
         btnSalvar.setOnAction(e -> {
-            // Obter os valores (pt.isec.pd.tp.bases.Docente usa o email atual guardado na sessão do handler)
+
             String novoNome = txtNome.getText().trim();
             String novaPass = txtPass.getText().trim();
 
-            // O backend espera um objeto pt.isec.pd.tp.bases.Docente. Usamos um email dummy, pois o Handler usa o userEmail.
+
             Docente d = new Docente(novoNome, "dummy@email.com", novaPass);
 
-            // Enviamos o pt.isec.pd.tp.mensagens.MsgEditarPerfil usando o construtor de pt.isec.pd.tp.bases.Docente
+
             new Thread(() -> {
                 try {
                     Object respObj = rede.enviarEReceber(new MsgEditarPerfil(d));

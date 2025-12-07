@@ -15,7 +15,7 @@ public class RedeCliente {
     private String serverIP;
     private int serverPort;
 
-    // Cadeado para impedir que threads misturem pedidos
+
     private final Object lock = new Object();
 
     public RedeCliente() {}
@@ -55,27 +55,24 @@ public class RedeCliente {
         System.out.println("[Rede] TCP conectado.");
     }
 
-    /**
-     * Método ATÓMICO e SINCRONIZADO para fazer pedidos.
-     * Garante que o pedido e a resposta não se misturam com outras threads.
-     */
+
     public Object enviarEReceber(Object pedido) throws Exception {
         synchronized (lock) {
             if (out == null || in == null) throw new IOException("Não conectado.");
 
-            // 1. Enviar
+
             out.writeObject(pedido);
             out.flush();
 
-            // 2. Receber (filtrando notificações que apareçam no meio)
+
             while (true) {
                 Object resposta = in.readObject();
 
-                // Se for uma notificação, mostramos mas continuamos à espera da resposta real
+
                 if (resposta instanceof String && ((String) resposta).startsWith("NOTIFICACAO:")) {
                     String msgNotif = ((String) resposta).substring(12);
                     System.out.println("[Notificação] " + msgNotif);
-                    // Opcional: Mostrar popup na GUI (tem de ser em Platform.runLater)
+
                     Platform.runLater(() -> {
                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                         alert.setTitle("Aviso do Sistema");
@@ -83,16 +80,16 @@ public class RedeCliente {
                         alert.setContentText(msgNotif);
                         alert.show();
                     });
-                    continue; // Volta a ler o próximo objeto
+                    continue;
                 }
 
-                // Se não for notificação, é a nossa resposta!
+
                 return resposta;
             }
         }
     }
 
-    // Métodos antigos mantidos por compatibilidade (mas evita usá-los diretamente)
+
     public void enviar(Object msg) throws IOException {
         synchronized (lock) {
             out.writeObject(msg);

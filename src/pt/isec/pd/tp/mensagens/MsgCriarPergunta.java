@@ -8,7 +8,7 @@ import java.util.List;
 public class MsgCriarPergunta extends Mensagem {
     private static final long serialVersionUID = 1L;
 
-    private final int docenteId; // ID do docente autenticado (obtido após login)
+    private final int docenteId;
     private final String enunciado;
     private final String inicio;
     private final String fim;

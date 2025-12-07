@@ -33,7 +33,7 @@ public class CenaEstudante {
     public BorderPane construir() {
         layoutPrincipal = new BorderPane();
 
-        // --- 1. MENU LATERAL (ESQUERDA) ---
+
         VBox menu = new VBox(10);
         menu.setPadding(new Insets(20));
         menu.setStyle("-fx-background-color: #f4f4f4; -fx-border-color: #ccc; -fx-border-width: 0 1 0 0;");
@@ -43,26 +43,26 @@ public class CenaEstudante {
         lblTitulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         lblTitulo.setStyle("-fx-text-fill: #333;");
 
-        // Estilo dos botões
+
         String estiloBtn = "-fx-background-radius: 5; -fx-padding: 10; -fx-font-size: 13px; -fx-base: #e0e0e0;";
 
         Button btnResponder = criarBotaoMenu("Responder a Pergunta", estiloBtn);
         Button btnHistorico = criarBotaoMenu("Ver Histórico", estiloBtn);
 
-        // NOVO BOTÃO QUE PEDISTE
+
         Button btnPerfil = criarBotaoMenu("Editar Perfil", estiloBtn);
 
         Button btnSair = criarBotaoMenu("Logout", estiloBtn + "-fx-base: #ffcccc; -fx-text-fill: #b71c1c;");
 
-        // Ações
+
         btnResponder.setOnAction(e -> mostrarEcraResponder());
         btnHistorico.setOnAction(e -> mostrarEcraHistorico());
 
-        // Ação do Editar Perfil (Dummy)
+
         btnPerfil.setOnAction(e -> abrirJanelaEditarPerfilEstudante());
 
         btnSair.setOnAction(e -> {
-            // Tenta avisar o servidor que vai sair
+
             new Thread(() -> { try { rede.enviar(new MsgLogout()); } catch(Exception ex){} }).start();
             app.mostrarLogin();
         });
@@ -70,15 +70,13 @@ public class CenaEstudante {
         menu.getChildren().addAll(lblTitulo, new Separator(), btnResponder, btnHistorico, btnPerfil, new Separator(), btnSair);
         layoutPrincipal.setLeft(menu);
 
-        // Ecrã inicial ao abrir
+
         mostrarEcraResponder();
 
         return layoutPrincipal;
     }
 
-    // ==================================================================================
-    // ECRÃ 1: RESPONDER A PERGUNTA
-    // ==================================================================================
+
     private void mostrarEcraResponder() {
         VBox container = new VBox(20);
         container.setPadding(new Insets(40));
@@ -88,7 +86,7 @@ public class CenaEstudante {
         lblTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
         lblTitle.setStyle("-fx-text-fill: #444;");
 
-        // Área de pesquisa
+
         HBox searchBox = new HBox(10);
         searchBox.setAlignment(Pos.CENTER_LEFT);
 
@@ -100,9 +98,9 @@ public class CenaEstudante {
         txtCodigo.setPrefWidth(150);
 
         Button btnBuscar = new Button("Buscar Pergunta");
-        btnBuscar.setDefaultButton(true); // Enter ativa este botão
+        btnBuscar.setDefaultButton(true);
 
-        // Área onde a pergunta vai aparecer (inicialmente escondida)
+
         VBox areaPergunta = new VBox(15);
         areaPergunta.setStyle("-fx-background-color: white; -fx-padding: 20; -fx-border-color: #ddd; -fx-border-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 10, 0, 0, 0);");
         areaPergunta.setVisible(false);
@@ -112,13 +110,13 @@ public class CenaEstudante {
         lblEnunciado.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #2c3e50;");
         lblEnunciado.setWrapText(true);
 
-        VBox opcoesGroup = new VBox(10); // Onde ficam os RadioButtons
+        VBox opcoesGroup = new VBox(10);
         ToggleGroup group = new ToggleGroup();
 
         Button btnSubmeter = new Button("Enviar Resposta");
         btnSubmeter.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-cursor: hand;");
 
-        // --- Lógica de Buscar ---
+
         btnBuscar.setOnAction(e -> {
             String codigo = txtCodigo.getText().trim();
             if (codigo.isEmpty()) {
@@ -128,7 +126,7 @@ public class CenaEstudante {
 
             new Thread(() -> {
                 try {
-                    // USA O MÉTODO SEGURO
+
                     Object resp = rede.enviarEReceber(new MsgObterPergunta(codigo));
 
                     Platform.runLater(() -> {
@@ -138,10 +136,10 @@ public class CenaEstudante {
                             opcoesGroup.getChildren().clear();
                             group.getToggles().clear();
 
-                            // Criar RadioButtons dinamicamente
+
                             for (Opcao o : p.getOpcoes()) {
                                 RadioButton rb = new RadioButton(o.getTexto());
-                                rb.setUserData(o.getLetra()); // Guardamos "a", "b" no user data
+                                rb.setUserData(o.getLetra());
                                 rb.setToggleGroup(group);
                                 rb.setFont(Font.font(14));
                                 opcoesGroup.getChildren().add(rb);
@@ -159,7 +157,7 @@ public class CenaEstudante {
             }).start();
         });
 
-        // --- Lógica de Submeter ---
+
         btnSubmeter.setOnAction(e -> {
             if (group.getSelectedToggle() == null) {
                 mostrarAlerta("Atenção", "Selecione uma opção!");
@@ -191,9 +189,7 @@ public class CenaEstudante {
         layoutPrincipal.setCenter(container);
     }
 
-    // ==================================================================================
-    // ECRÃ 2: HISTÓRICO
-    // ==================================================================================
+
     private void mostrarEcraHistorico() {
         VBox container = new VBox(15);
         container.setPadding(new Insets(30));
@@ -208,7 +204,7 @@ public class CenaEstudante {
 
         Button btnAtualizar = new Button("Atualizar Lista");
 
-        // Lógica de carregar dados
+
         Runnable carregarDados = () -> {
             new Thread(() -> {
                 try {
@@ -222,7 +218,7 @@ public class CenaEstudante {
                                 listaView.setPlaceholder(new Label("Sem histórico de perguntas expiradas."));
                             } else {
                                 for (HistoricoItem item : lista) {
-                                    // Usa o toString() bonito do pt.isec.pd.tp.bases.HistoricoItem
+
                                     listaView.getItems().add(item.toString());
                                 }
                             }
@@ -234,14 +230,14 @@ public class CenaEstudante {
 
         btnAtualizar.setOnAction(e -> carregarDados.run());
 
-        // Carrega logo ao abrir o ecrã
+
         carregarDados.run();
 
         container.getChildren().addAll(lblTitle, btnAtualizar, listaView);
         layoutPrincipal.setCenter(container);
     }
 
-    // --- Helpers de Interface ---
+
     private Button criarBotaoMenu(String texto, String estilo) {
         Button btn = new Button(texto);
         btn.setMaxWidth(Double.MAX_VALUE);
@@ -289,10 +285,10 @@ public class CenaEstudante {
                 lblStatus.setText("ERRO: O Nº Estudante é obrigatório."); return;
             }
 
-            // O backend espera um objeto pt.isec.pd.tp.bases.Estudante. Usamos um email dummy.
+
             Estudante est = new Estudante(novoNum, novoNome, "dummy@email.com", novaPass);
 
-            // Enviamos o pt.isec.pd.tp.mensagens.MsgEditarPerfil usando o construtor de pt.isec.pd.tp.bases.Estudante
+
             new Thread(() -> {
                 try {
                     Object respObj = rede.enviarEReceber(new MsgEditarPerfil(est));

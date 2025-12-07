@@ -3,7 +3,7 @@ package pt.isec.pd.tp.mensagens;
 public class MsgObterRespostas extends Mensagem {
     private static final long serialVersionUID = 1L;
     
-    private final String codigoAcesso; // Identifica a pergunta
+    private final String codigoAcesso;
 
     public MsgObterRespostas(String codigoAcesso) {
         this.codigoAcesso = codigoAcesso;

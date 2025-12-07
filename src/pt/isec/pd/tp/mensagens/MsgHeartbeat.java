@@ -6,9 +6,9 @@ public class MsgHeartbeat extends Mensagem {
     private final int versaoBD;
     private final int portoClienteTCP;
     private final int portoBDT_TCP;
-    private final String querySQL; // Null se for um Heartbeat periódico
+    private final String querySQL;
 
-    // Construtor para Heartbeat periódico (sem alteração de dados)
+
     public MsgHeartbeat(int versaoBD, int portoClienteTCP, int portoBDT_TCP) {
         this.versaoBD = versaoBD;
         this.portoClienteTCP = portoClienteTCP;
@@ -16,7 +16,7 @@ public class MsgHeartbeat extends Mensagem {
         this.querySQL = null;
     }
 
-    // Construtor para Heartbeat com alteração de dados
+
     public MsgHeartbeat(int versaoBD, int portoClienteTCP, int portoBDT_TCP, String querySQL) {
         this.versaoBD = versaoBD;
         this.portoClienteTCP = portoClienteTCP;

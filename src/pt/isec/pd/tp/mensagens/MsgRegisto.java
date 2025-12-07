@@ -10,14 +10,14 @@ public class MsgRegisto extends Mensagem {
     private final Estudante estudante;
     private final String codigoDocente;
 
-    // Construtor para pt.isec.pd.tp.bases.Docente (inclui código único)
+
     public MsgRegisto(Docente docente, String codigoDocente) {
         this.docente = docente;
         this.estudante = null;
         this.codigoDocente = codigoDocente;
     }
 
-    // Construtor para pt.isec.pd.tp.bases.Estudante
+
     public MsgRegisto(Estudante estudante) {
         this.docente = null;
         this.estudante = estudante;
