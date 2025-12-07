@@ -5,9 +5,9 @@ import java.io.Serializable;
 public class Estudante implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private String numEstudante; // Único
+    private String numEstudante;
     private String nome;
-    private String email; // Único
+    private String email;
     private String password;
 
     public Estudante(String numEstudante, String nome, String email, String password) {

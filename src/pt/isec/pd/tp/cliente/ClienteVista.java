@@ -137,16 +137,15 @@ public class ClienteVista {
         String novoNome = lerTexto("Novo Nome: ");
         String novaPass = lerTexto("Nova Password: "); // Senha deve ser alterada
 
-        // Se a password ou nome for vazio, mantém a lógica atual. Aqui assumimos que o utilizador
-        // está a fornecer valores que substituirão os antigos, ou a repeti-los se não for para alterar.
+
         if (novoNome.isEmpty()) novoNome = "NAO_ALTERAR";
         if (novaPass.isEmpty()) novaPass = "NAO_ALTERAR";
 
-        if (tipoUtilizador == 1) { // pt.isec.pd.tp.bases.Docente
-            // No pt.isec.pd.tp.bases.Docente, não há campo extra (Nº pt.isec.pd.tp.bases.Estudante), usamos placeholder para o email
+        if (tipoUtilizador == 1) {
+
             Docente d = new Docente(novoNome, emailAtual, novaPass);
             return new MsgEditarPerfil(d);
-        } else { // pt.isec.pd.tp.bases.Estudante
+        } else {
             String novoNumEstudante = lerTexto("Novo Nº pt.isec.pd.tp.bases.Estudante: ");
             if (novoNumEstudante.isEmpty()) novoNumEstudante = "NAO_ALTERAR";
 

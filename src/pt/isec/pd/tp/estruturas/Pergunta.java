@@ -14,7 +14,7 @@ public class Pergunta implements Serializable {
     private List<Opcao> opcoes;
     private int docenteId;
 
-    // Construtor usado pelo pt.isec.pd.tp.bases.Docente ao criar a pergunta (sem ID nem código ainda)
+
     public Pergunta(String enunciado, String inicio, String fim, List<Opcao> opcoes) {
         this.enunciado = enunciado;
         this.dataInicio = inicio;
@@ -22,7 +22,7 @@ public class Pergunta implements Serializable {
         this.opcoes = opcoes;
     }
 
-    // Construtor completo (usado quando vem da BD)
+
     public Pergunta(int id, String enunciado, String codigo, String inicio, String fim, List<Opcao> opcoes) {
         this.id = id;
         this.enunciado = enunciado;
@@ -32,7 +32,7 @@ public class Pergunta implements Serializable {
         this.opcoes = opcoes;
     }
 
-    // Getters e Setters necessários
+
     public String getEnunciado() { return enunciado; }
     public List<Opcao> getOpcoes() { return opcoes; }
     public String getCodigoAcesso() { return codigoAcesso; }
@@ -42,7 +42,7 @@ public class Pergunta implements Serializable {
     public void setId(int id) { this.id = id; }
     public void setOpcoes(List<Opcao> opcoes) {this.opcoes = opcoes;}
 
-    // Para debug
+
     @Override
     public String toString() {
         return "pt.isec.pd.tp.bases.Pergunta{" + "enunciado='" + enunciado + '\'' + ", codigo='" + codigoAcesso + '\'' + '}';

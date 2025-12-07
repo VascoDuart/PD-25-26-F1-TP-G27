@@ -22,14 +22,14 @@ public class ClienteComunicacao {
         try {
             socket = new Socket(ip, porto);
 
-            // CORREÇÃO CRÍTICA: Flush imediato
+
             out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
 
             in = new ObjectInputStream(socket.getInputStream());
 
             conectado = true;
-            new Thread(this::listenerLoop).start(); // Inicia escuta
+            new Thread(this::listenerLoop).start();
             return true;
         } catch (IOException e) {
             System.err.println("[Coms] Erro ao conectar: " + e.getMessage());

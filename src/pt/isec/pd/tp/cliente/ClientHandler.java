@@ -45,10 +45,10 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() {
         try {
-            // Define o timeout inicial para a fase de login/registo
+
             clientSocket.setSoTimeout(AUTH_TIMEOUT_MS);
 
-            // --- FASE 1: AUTENTICAÇÃO ---
+
             while (estadoLogin == ESTADO_INICIAL) {
                 try {
                     Object msg = in.readObject();
@@ -61,21 +61,21 @@ public class ClientHandler implements Runnable {
                 }
             }
 
-            clientSocket.setSoTimeout(0); // Remove o timeout após o login
+            clientSocket.setSoTimeout(0);
             System.out.println("[Handler] pt.isec.pd.tp.cliente.Cliente " + userEmail + " autenticado.");
 
-            // --- FASE 2: INTERAÇÃO ---
+
             while (true) {
                 try {
                     Object msg = in.readObject();
 
-                    // 1. TRATAMENTO EXPLÍCITO DE LOGOUT
+
                     if (msg instanceof MsgLogout) {
                         enviarObjeto("SUCESSO: Logout efetuado.");
                         return;
                     }
 
-                    // 2. LÓGICA DE NEGÓCIO (Envolvida em bloco try/catch para garantir resposta)
+
                     try {
                         if (estadoLogin == ESTADO_DOCENTE) {
                             if (msg instanceof MsgCriarPergunta) {
@@ -92,9 +92,9 @@ public class ClientHandler implements Runnable {
                                 processarEditarPergunta((MsgEditarPergunta) msg);
                             } else if (msg instanceof MsgObterEstatisticas) {
                                 processarObterEstatisticas((MsgObterEstatisticas) msg);
-                            } else if (msg instanceof MsgObterPergunta) { // Adicionado para pt.isec.pd.tp.bases.Docente
+                            } else if (msg instanceof MsgObterPergunta) {
                                 processarObterPergunta((MsgObterPergunta) msg);
-                            } else if (msg instanceof MsgEditarPerfil) { // NOVO
+                            } else if (msg instanceof MsgEditarPerfil) {
                                 processarEditarPerfil((MsgEditarPerfil) msg);
                             }
 
@@ -111,9 +111,9 @@ public class ClientHandler implements Runnable {
                             }
                         }
                     } catch (Exception e) {
-                        // CAPTURA QUALQUER ERRO DE LÓGICA DE NEGÓCIO
+
                         System.err.println("[Handler] Erro ao processar mensagem: " + e.getMessage());
-                        // CRÍTICO: Envia a resposta de erro ao cliente para prevenir bloqueio
+
                         enviarObjeto("ERRO INTERNO: Falha na lógica do servidor: " + e.getMessage());
                     }
 
@@ -132,7 +132,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    // --- MÉTODOS AUXILIARES ---
+
 
     private synchronized void enviarObjeto(Object obj) throws IOException {
         out.writeObject(obj);
@@ -152,7 +152,7 @@ public class ClientHandler implements Runnable {
         return userEmail;
     }
 
-    // --- PROCESSAMENTO DE MENSAGENS DE LÓGICA DE NEGÓCIO ---
+
 
     private void processarLogin(MsgLogin msg) throws IOException {
         if (dbManager.autenticarDocente(msg.getEmail(), msg.getPassword())) {
@@ -186,7 +186,7 @@ public class ClientHandler implements Runnable {
                             resposta = "SUCESSO: pt.isec.pd.tp.bases.Docente registado!";
                             serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
                         } else {
-                            resposta = "ERRO: pt.isec.pd.tp.bases.Docente ja registado ou email duplicado."; // FALHA NO registarDocente
+                            resposta = "ERRO: pt.isec.pd.tp.bases.Docente ja registado ou email duplicado.";
                         }
                     }
                 } else if (msg.isEstudante()) {
@@ -195,21 +195,21 @@ public class ClientHandler implements Runnable {
                         resposta = "SUCESSO: pt.isec.pd.tp.bases.Estudante registado!";
                         serverAPI.publicarAlteracao(querySql, dbManager.getVersaoBD());
                     } else {
-                        resposta = "ERRO: Dados inválidos ou duplicados (email/número)."; // FALHA NO registarEstudante
+                        resposta = "ERRO: Dados inválidos ou duplicados (email/número).";
                     }
                 }
             } catch (Exception e) {
-                // Se qualquer coisa falhar (SQL, Hash, etc.)
+
                 System.err.println("[Handler] Erro de BD/Lógica no registo: " + e.getMessage());
                 e.printStackTrace();
                 resposta = "ERRO: Falha de servidor ao processar registo. Tente de novo.";
             }
         }
-        // GARANTIA DE RESPOSTA:
+
         enviarObjeto(resposta);
     }
 
-    // --- NOVO: PROCESSAR EDIÇÃO DE PERFIL ---
+
     private void processarEditarPerfil(MsgEditarPerfil msg) throws IOException {
         String resposta = "ERRO: Não foi possível editar o perfil.";
         String querySql = null;
@@ -217,11 +217,11 @@ public class ClientHandler implements Runnable {
         synchronized (serverAPI.getBDLock()) {
             if (msg.isDocente() && estadoLogin == ESTADO_DOCENTE) {
                 Docente d = msg.getNovoDocente();
-                // userEmail é o email antigo, usado como chave para o UPDATE
+
                 querySql = dbManager.editarDocente(userEmail, d.getNome(), d.getPassword());
             } else if (msg.isEstudante() && estadoLogin == ESTADO_ESTUDANTE) {
                 Estudante e = msg.getNovoEstudante();
-                // O email é a chave; novoNum e novoNome são os dados a atualizar
+
                 querySql = dbManager.editarEstudante(userEmail, e.getNumEstudante(), e.getNome(), e.getPassword());
             }
 
@@ -234,7 +234,7 @@ public class ClientHandler implements Runnable {
         }
         enviarObjeto(resposta);
     }
-    // --- FIM NOVO ---
+
 
     private void processarCriarPergunta(MsgCriarPergunta msg) throws IOException {
         String resposta = "ERRO: Falha na BD.";
@@ -254,31 +254,31 @@ public class ClientHandler implements Runnable {
     }
 
 
-    // CORRIGIDO: Garante resposta se a pergunta não for encontrada (pt.isec.pd.tp.bases.Docente ou pt.isec.pd.tp.bases.Estudante)
+
     private void processarObterPergunta(MsgObterPergunta msg) throws IOException {
         Pergunta p = dbManager.obterPerguntaPorCodigo(msg.getCodigoAcesso());
 
         if (p == null) {
-            // CORREÇÃO: Responde com ERRO se não encontrada, prevenindo bloqueio na 1ª chamada de Exportação.
+
             enviarObjeto("ERRO: pt.isec.pd.tp.bases.Pergunta com código " + msg.getCodigoAcesso() + " não encontrada.");
             return;
         }
 
-        // Se é pt.isec.pd.tp.bases.Docente (que está a tentar exportar), enviamos a pt.isec.pd.tp.bases.Pergunta completa sem validações.
+
         if (estadoLogin == ESTADO_DOCENTE) {
             enviarObjeto(p);
             return;
         }
 
-        // Se é pt.isec.pd.tp.bases.Estudante, validamos o estado e filtramos as opções.
+
         if (estadoLogin == ESTADO_ESTUDANTE) {
             if (dbManager.isPerguntaAtiva(p.getCodigoAcesso())) {
-                // Filtra a opção correta antes de enviar para o estudante (CORREÇÃO DE CONTEÚDO)
+
                 List<Opcao> opcoesFiltradas = p.getOpcoes().stream()
                         .map(o -> new Opcao(o.getLetra(), o.getTexto(), false))
                         .collect(Collectors.toList());
 
-                // NOTA: p.setOpcoes deve existir em pt.isec.pd.tp.bases.Pergunta.
+
                 p.setOpcoes(opcoesFiltradas);
 
                 enviarObjeto(p);
@@ -291,10 +291,10 @@ public class ClientHandler implements Runnable {
     private void processarResponderPergunta(MsgResponderPergunta msg) throws IOException {
         String resposta = "ERRO: Falha (já respondeste ou pergunta invalida?).";
 
-        // A VALIDAÇÃO DE isPerguntaAtiva deve ser feita no pt.isec.pd.tp.DatabaseManager antes de inserir.
+
 
         synchronized (serverAPI.getBDLock()) {
-            // Verifica se a pergunta está ATIVA antes de tentar registar
+
             if (!dbManager.isPerguntaAtiva(msg.getCodigoAcesso())) {
                 resposta = "ERRO: pt.isec.pd.tp.bases.Pergunta não está ativa.";
             } else {
@@ -311,10 +311,10 @@ public class ClientHandler implements Runnable {
         enviarObjeto(resposta);
     }
 
-    // CORRIGIDO: Lógica de expiração e garantia de resposta (pt.isec.pd.tp.bases.Docente)
+
     private void processarObterRespostas(MsgObterRespostas msg) throws IOException {
         String codigo = msg.getCodigoAcesso();
-        Pergunta p = dbManager.obterPerguntaPorCodigo(codigo); // Carregamos a pergunta primeiro
+        Pergunta p = dbManager.obterPerguntaPorCodigo(codigo);
 
         if (p == null) {
             enviarObjeto("ERRO: pt.isec.pd.tp.bases.Pergunta com código " + codigo + " não encontrada.");
@@ -328,14 +328,14 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        // CRÍTICO: Verificar se a pergunta expirou para permitir a exportação/consulta.
+
         if (!dbManager.isPerguntaExpirada(codigo)) {
-            // Envia mensagem de erro (String) ao cliente, resolvendo o bloqueio.
+
             enviarObjeto("ERRO: A exportação/consulta só é permitida para perguntas expiradas.");
             return;
         }
 
-        // Se passou todas as verificações:
+
         List<RespostaEstudante> resps = dbManager.obterRespostasDaPergunta(codigo);
 
         if (resps == null) {
@@ -343,7 +343,7 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        // Envia a lista de respostas.
+
         enviarObjeto(resps);
     }
 
@@ -385,7 +385,7 @@ public class ClientHandler implements Runnable {
         enviarObjeto(resposta);
     }
 
-    // Lógica simplificada de estatísticas (sem redundância)
+
     private void processarObterEstatisticas(MsgObterEstatisticas msg) throws IOException {
         String codigo = msg.getCodigoAcesso();
         int donoId = dbManager.obterDocenteIDDaPergunta(codigo);
@@ -400,7 +400,7 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        // Se OK:
+
         String stats = dbManager.obterEstatisticas(codigo);
         enviarObjeto(stats);
     }
