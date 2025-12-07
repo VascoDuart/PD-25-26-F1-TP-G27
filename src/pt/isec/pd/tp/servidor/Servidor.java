@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// O pt.isec.pd.tp.servidor.Servidor implementa pt.isec.pd.tp.servidor.ServerAPI para que o pt.isec.pd.tp.cliente.ClientHandler possa comunicar alterações.
+
 public class Servidor implements ServerAPI {
 
     private final String ipDiretorio;
@@ -29,7 +29,7 @@ public class Servidor implements ServerAPI {
 
     private DatabaseManager db;
     private HeartbeatSender heartbeatSender;
-    private MulticastListener multicastListener; // Variável para controlar a thread Multicast
+    private MulticastListener multicastListener;
 
     private final List<ClientHandler> clientesConectados = Collections.synchronizedList(new ArrayList<>());
     private final Object BD_LOCK = new Object();
@@ -46,7 +46,7 @@ public class Servidor implements ServerAPI {
 
     public void iniciar() {
         try {
-            // 1. Obter IP da interface de rede local (requerido para Multicast)
+
             this.ipLocal = InetAddress.getLocalHost();
 
             try (ServerSocket srvClientes = new ServerSocket(0);
@@ -60,10 +60,10 @@ public class Servidor implements ServerAPI {
 
                 System.out.println("[pt.isec.pd.tp.servidor.Servidor] A escutar Clientes TCP no porto: " + portoClienteTCP);
 
-                // 2. Preparar e Ligar à BD antes do registo
+
                 prepararBaseDeDados();
 
-                // 3. Registar no Diretoria e identificar o modo
+
                 MsgRespostaDiretoria resposta = registarNoDiretorio();
 
                 if (resposta == null || !resposta.existeServidor()) {
@@ -72,34 +72,34 @@ public class Servidor implements ServerAPI {
                     return;
                 }
 
-                // 4. Determinar se somos o Principal
+
                 this.isPrincipal = (resposta.getPortoClienteTCP() == this.portoClienteTCP);
 
-                // 5. Iniciar Threads - ORDEM CRÍTICA
 
-                // Thread 1: Heartbeat (inicia o papel inicial - Principal ou Backup)
+
+
                 this.heartbeatSender = new HeartbeatSender(this, db, ipDiretorio, portoDiretorio, portoClienteTCP, portoBDT_TCP, ipLocal);
-                this.heartbeatSender.updateRole(this.isPrincipal); // Determina o papel inicial
+                this.heartbeatSender.updateRole(this.isPrincipal);
                 new Thread(this.heartbeatSender).start();
 
-                // Thread 2: Multicast Listener (todos escutam)
+
                 this.multicastListener = new MulticastListener(this, db, ipMulticast, ipLocal);
                 new Thread(this.multicastListener).start();
 
-                // Thread 3 & 4: Aceitação de Conexões TCP (devem estar sempre a correr)
+
                 aceitarPedidosBD();
                 aceitarClientes();
 
-                // 6. LOGS
+
                 if (this.isPrincipal) {
                     System.out.println("[pt.isec.pd.tp.servidor.Servidor] >>> MODO PRINCIPAL <<<");
                 } else {
                     System.out.println("[pt.isec.pd.tp.servidor.Servidor] >>> MODO BACKUP <<<");
-                    // 7. Se for Backup, recebe cópia da BD e fica em espera.
+
                     receberCopiaBD(resposta.getIpServidorPrincipal(), resposta.getPortoBDT_TCP());
                 }
 
-                // Loop para manter a main thread viva
+
                 System.out.println("[pt.isec.pd.tp.servidor.Servidor] Em funcionamento. Pressione Ctrl+C para sair.");
                 while(true) { Thread.sleep(10000); }
 
@@ -126,10 +126,7 @@ public class Servidor implements ServerAPI {
         return this.portoClienteTCP;
     }
 
-    /**
-     * Rotina crítica para promover o servidor Backup a Principal (Handover).
-     * Chamada pelo pt.isec.pd.tp.HeartbeatSender quando a Diretoria confirma a promoção.
-     */
+
     public synchronized void ativarServicosPrincipal() {
         if (this.isPrincipal) return;
 
@@ -138,46 +135,44 @@ public class Servidor implements ServerAPI {
         System.out.println("[pt.isec.pd.tp.servidor.Servidor] >>> PROMOVIDO A PRINCIPAL <<< ");
         System.out.println("************************************************\n");
 
-        // 1. OBRIGATÓRIO: PARAR A THREAD DE ESCUTA MULTICAST (REPLICAÇÃO DE BACKUP)
-        // Isto impede que o novo Principal se torne instável ao receber updates antigos.
+
         if (this.multicastListener != null) {
             this.multicastListener.stop();
             this.multicastListener = null;
             System.out.println("[pt.isec.pd.tp.servidor.Servidor] Multicast Listener (Replicação) parado.");
         }
 
-        // 2. ATUALIZAR HEARTBEAT SENDER
-        // O pt.isec.pd.tp.HeartbeatSender deve agora enviar Heartbeats como Principal.
+
         if (this.heartbeatSender != null) {
             this.heartbeatSender.updateRole(true);
             System.out.println("[pt.isec.pd.tp.servidor.Servidor] Heartbeat Sender atualizado para Principal.");
         }
 
-        // 3. ATIVAÇÃO DE SERVIÇOS TCP: O flag 'isPrincipal = true' desbloqueia os ClientHandlers.
+
         notificarTodosClientes("Serviço Principal restabelecido.");
     }
 
     private void fecharRecursos() {
         if (heartbeatSender != null) {
-            heartbeatSender.stop(); // Interrompe a thread Heartbeat
+            heartbeatSender.stop();
         }
         if (multicastListener != null) {
-            multicastListener.stop(); // Encerra a escuta Multicast
+            multicastListener.stop();
         }
         try { srvSocketClientes.close(); } catch (Exception e) {}
         try { srvSocketDB.close(); } catch (Exception e) {}
         if (db != null) db.desconectar();
-        // NOTA: Devemos também enviar uma MsgLogoutServidor à Diretoria aqui.
+
     }
 
     private void prepararBaseDeDados() throws Exception {
         this.db = new DatabaseManager(this.dbPath);
         db.conectar();
-        db.criarTabelas(); // Cria BD se não existir (ou versão 0)
+        db.criarTabelas();
         System.out.println("[Principal] BD pronta e tabelas verificadas.");
     }
 
-    // --- THREAD DE ACEITAÇÃO DE CLIENTES (TCP) ---
+
     private void aceitarClientes() {
         new Thread(() -> {
             System.out.println("[Accept] Thread de aceitação de clientes iniciada.");
@@ -185,7 +180,7 @@ public class Servidor implements ServerAPI {
                 try {
                     Socket s = srvSocketClientes.accept();
                     try {
-                        // Passar a referência do pt.isec.pd.tp.servidor.Servidor (this), que implementa pt.isec.pd.tp.servidor.ServerAPI
+
                         ClientHandler handler = new ClientHandler(s, this.db, this);
                         clientesConectados.add(handler);
                         new Thread(handler).start();
@@ -205,7 +200,7 @@ public class Servidor implements ServerAPI {
         return BD_LOCK;
     }
 
-    // --- THREAD DE ACEITAÇÃO DE PEDIDOS DE BD (TCP) ---
+
     private void aceitarPedidosBD() {
         new Thread(() -> {
             System.out.println("[BD Accept] Thread de aceitação de Backups (BD) iniciada.");
@@ -257,7 +252,7 @@ public class Servidor implements ServerAPI {
         }
     }
 
-    // --- COMUNICAÇÃO COM DIRETORIA (UDP/Registo) ---
+
     private MsgRespostaDiretoria registarNoDiretorio() {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setSoTimeout(5000);
@@ -282,7 +277,7 @@ public class Servidor implements ServerAPI {
         }
     }
 
-    // --- IMPLEMENTAÇÃO DA INTERFACE pt.isec.pd.tp.servidor.ServerAPI ---
+
     @Override
     public void publicarAlteracao(String querySQL, int novaVersao) {
         if (!this.isPrincipal) {

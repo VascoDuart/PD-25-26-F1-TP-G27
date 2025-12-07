@@ -13,12 +13,12 @@ import java.util.List;
 public class ExportadorCSV {
 
     public static void exportar(String nomeFicheiro, Pergunta p, List<RespostaEstudante> respostas) {
-        // Usa encoding UTF-8 explicitamente e adiciona BOM para Excel
+
         try (PrintWriter pw = new PrintWriter(new FileWriter(nomeFicheiro, StandardCharsets.UTF_8))) {
-            // Escreve BOM (Byte Order Mark) para o Excel reconhecer UTF-8
+
             pw.write('\ufeff');
 
-            // Lógica para encontrar a opção correta
+
             String letraCorreta = "N/A";
             if (p.getOpcoes() != null) {
                 for (Opcao o : p.getOpcoes()) {
@@ -29,11 +29,10 @@ public class ExportadorCSV {
                 }
             }
 
-            // Lógica para extrair apenas a data (dia) do início
-            // Assumindo formato "YYYY-MM-DD HH:mm" -> pega só na parte antes do espaço
+
             String dia = p.getInicio().contains(" ") ? p.getInicio().split(" ")[0] : p.getInicio();
 
-            // 1. Cabeçalho da pt.isec.pd.tp.bases.Pergunta
+
             pw.println("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
             pw.printf("\"%s\";\"%s\";\"%s\";\"%s\";\"%s\"%n",
                     dia,
@@ -45,7 +44,7 @@ public class ExportadorCSV {
 
             pw.println();
 
-            // 2. Opções
+
             pw.println("\"opção\";\"texto da opção\"");
             if (p.getOpcoes() != null) {
                 for (Opcao o : p.getOpcoes()) {
@@ -55,7 +54,7 @@ public class ExportadorCSV {
 
             pw.println();
 
-            // 3. Respostas dos Estudantes
+
             pw.println("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
             if (respostas != null) {
                 for (RespostaEstudante r : respostas) {

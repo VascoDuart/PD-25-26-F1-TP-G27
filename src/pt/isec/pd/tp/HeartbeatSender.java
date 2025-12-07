@@ -24,7 +24,7 @@ public class HeartbeatSender implements Runnable {
     private volatile boolean running = true;
     private volatile String pendingQuery = null;
     private volatile int pendingVersion = -1;
-    private volatile boolean isPrincipal = false; // Estado interno para envio Multicast
+    private volatile boolean isPrincipal = false;
 
     public HeartbeatSender(Servidor s, DatabaseManager db, String ipDir, int pDir, int pCliente, int pDB, InetAddress ipLocal) {
         this.servidor = s;
@@ -37,7 +37,7 @@ public class HeartbeatSender implements Runnable {
     }
 
     public void stop() { running = false; }
-    public void updateRole(boolean isPrincipal) { this.isPrincipal = isPrincipal; } // Setter para a transição
+    public void updateRole(boolean isPrincipal) { this.isPrincipal = isPrincipal; }
 
     public void dispararHeartbeatEscrita(String querySQL, int novaVersao) {
         this.pendingQuery = querySQL;
@@ -65,21 +65,21 @@ public class HeartbeatSender implements Runnable {
                 MsgHeartbeat heartbeat = new MsgHeartbeat(version, portoClienteTCP, portoBDT_TCP, queryToSend);
                 byte[] data = serializar(heartbeat);
 
-                // 1. Envio para a Diretoria (UDP Unicast)
+
                 socketDir.send(new DatagramPacket(data, data.length, InetAddress.getByName(ipDiretorio), portoDiretorio));
 
-                // 2. RECEBER RESPOSTA E VERIFICAR PROMOÇÃO (CRÍTICO)
+
                 byte[] buffer = new byte[4096];
                 DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
 
                 try {
                     socketDir.receive(responsePacket);
-                    processarRespostaDiretoria(responsePacket, socketDir); // Processa a resposta
+                    processarRespostaDiretoria(responsePacket, socketDir);
                 } catch (SocketTimeoutException e) {
-                    // Timeout esperado se a Diretoria estiver ocupada.
+
                 }
 
-                // 3. Envio para o Cluster (UDP Multicast) - SÓ SE SOMOS PRINCIPAL
+
                 if (this.isPrincipal) {
                     enviarMulticast(data);
                 }
@@ -95,7 +95,7 @@ public class HeartbeatSender implements Runnable {
         try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()))) {
             MsgRespostaDiretoria resposta = (MsgRespostaDiretoria) ois.readObject();
 
-            // 1. Verificar se a Diretoria nos indica como o NOVO Principal
+
             boolean somosONovoPrincipal =
                     resposta.existeServidor() &&
                             resposta.getIpServidorPrincipal().equals(servidor.getIPLocal()) &&

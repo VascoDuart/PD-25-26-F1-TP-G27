@@ -19,9 +19,7 @@ public class DatabaseManager {
         this.dbPath = dbPath;
     }
 
-    // ==================================================================================
-    // 1. SEGURANÇA E UTILITÁRIOS
-    // ==================================================================================
+
 
     private String hashPassword(String password) {
         try {
@@ -46,9 +44,7 @@ public class DatabaseManager {
         return false;
     }
 
-    // ==================================================================================
-    // 2. CONFIGURAÇÃO E LIGAÇÃO
-    // ==================================================================================
+
 
     public void conectar() throws SQLException {
         try {
@@ -161,9 +157,7 @@ public class DatabaseManager {
         }
     }
 
-    // ==================================================================================
-    // 3. GESTÃO DE UTILIZADORES
-    // ==================================================================================
+
 
     public synchronized String registarDocente(Docente d) {
         String sql = "INSERT INTO Docente(nome, email, password) VALUES(?,?,?)";
@@ -187,7 +181,7 @@ public class DatabaseManager {
         }
     }
 
-    // --- NOVO: EDIÇÃO DE PERFIL DOCENTE ---
+
     public synchronized String editarDocente(String emailAntigo, String novoNome, String novaPass) {
         String passHash = hashPassword(novaPass);
         String sql = "UPDATE Docente SET nome = ?, password = ? WHERE email = ?";
@@ -209,7 +203,7 @@ public class DatabaseManager {
         }
         return null;
     }
-    // --- FIM NOVO ---
+
 
     public synchronized String registarEstudante(Estudante e) {
         String sql = "INSERT INTO Estudante(numero_estudante, nome, email, password) VALUES(?,?,?,?)";
@@ -234,10 +228,10 @@ public class DatabaseManager {
         }
     }
 
-    // --- NOVO: EDIÇÃO DE PERFIL ESTUDANTE ---
+
     public synchronized String editarEstudante(String emailAntigo, String novoNum, String novoNome, String novaPass) {
         String passHash = hashPassword(novaPass);
-        // Usamos o email (chave de sessão) e atualizamos os campos
+
         String sql = "UPDATE Estudante SET numero_estudante = ?, nome = ?, password = ? WHERE email = ?";
 
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -258,7 +252,7 @@ public class DatabaseManager {
         }
         return null;
     }
-    // --- FIM NOVO ---
+
 
 
     public synchronized boolean autenticarDocente(String email, String password) {
@@ -311,9 +305,7 @@ public class DatabaseManager {
         return -1;
     }
 
-    // ==================================================================================
-    // 4. GESTÃO DE PERGUNTAS
-    // ==================================================================================
+
 
     public synchronized String criarPergunta(int docenteId, String enunciado, String codAcesso, String inicio, String fim, List<Opcao> opcoes) {
         if (opcoes == null || opcoes.size() < 2) return null;
@@ -403,7 +395,7 @@ public class DatabaseManager {
         return false;
     }
 
-    // Dentro da classe pt.isec.pd.tp.DatabaseManager
+
 
     public boolean isPerguntaAtiva(String codigoAcesso) {
         String sql = "SELECT inicio, fim FROM Pergunta WHERE codigo_acesso = ?";
@@ -415,12 +407,10 @@ public class DatabaseManager {
                 String inicioStr = rs.getString("inicio");
                 String fimStr = rs.getString("fim");
 
-                // As datas devem ser trimmed para evitar erros de parsing de espaço em branco
                 java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr.trim(), FORMATTER);
                 java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr.trim(), FORMATTER);
                 java.time.LocalDateTime agora = java.time.LocalDateTime.now();
 
-                // A pergunta é ATIVA se: (Início <= Agora) E (Fim >= Agora)
                 return !inicio.isAfter(agora) && !fim.isBefore(agora);
             }
         } catch (java.sql.SQLException e) {
@@ -466,9 +456,7 @@ public class DatabaseManager {
         return lista;
     }
 
-    // ==================================================================================
-    // 5. GESTÃO DE RESPOSTAS
-    // ==================================================================================
+
 
     public synchronized String registarResposta(int estudanteId, String codigoAcesso, String letra) {
         String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
@@ -503,9 +491,7 @@ public class DatabaseManager {
         }
     }
 
-    // ==================================================================================
-    // 6. GESTÃO DO CLUSTER E REPLICAÇÃO
-    // ==================================================================================
+
 
     public synchronized void executarQueryReplica(String querySQL) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
@@ -536,9 +522,7 @@ public class DatabaseManager {
         return -1;
     }
 
-    // ==================================================================================
-    // 7. RELATÓRIOS E LISTAGENS
-    // ==================================================================================
+
 
 
 
@@ -547,11 +531,11 @@ public class DatabaseManager {
         String sqlId = "SELECT id FROM Pergunta WHERE codigo_acesso = ?";
         int perguntaId = -1;
 
-        // 1. Obter ID da pt.isec.pd.tp.bases.Pergunta (Usando try-with-resources para garantir o fecho do ResultSet)
+
         try (PreparedStatement ps = conn.prepareStatement(sqlId)) {
             ps.setString(1, codigoAcesso);
 
-            // O ResultSet da primeira consulta agora está em seu próprio try-with-resources
+
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) perguntaId = rs.getInt("id");
             }
@@ -565,13 +549,13 @@ public class DatabaseManager {
             return lista;
         }
 
-        // 2. Query com JOIN (Resposta + pt.isec.pd.tp.bases.Estudante)
+
         System.out.println("[DEBUG DB] Iniciando consulta de respostas..."); // LOG 1
 
         String sql = "SELECT e.numero_estudante, e.nome, e.email, r.opcao_escolhida " +
                 "FROM Resposta r JOIN Estudante e ON r.estudante_id = e.id WHERE r.pergunta_id = ?";
 
-        // O PreparedStatement e o ResultSet da segunda consulta também usam try-with-resources
+
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, perguntaId);
 
@@ -589,18 +573,16 @@ public class DatabaseManager {
 
                 System.out.println("[DEBUG DB] Fim da leitura. Total de respostas lidas: " + lista.size()); // LOG 3
 
-            } // Fecho automático do ResultSet
+            }
         } catch (SQLException e) {
             System.err.println("[BD] Erro fatal ao obter respostas: " + e.getMessage());
-        } // Fecho automático do PreparedStatement
+        }
 
         System.out.println("[DEBUG DB] Retornando lista de respostas."); // LOG 4
         return lista;
     }
 
-    // ==================================================================================
-    // 8. EDIÇÃO E ELIMINAÇÃO (MÉTODOS NOVOS ADICIONADOS)
-    // ==================================================================================
+
 
     /**
      * Verifica se uma pergunta pode ser alterada.
@@ -609,7 +591,7 @@ public class DatabaseManager {
      * 2. A pergunta NÃO pode ter respostas associadas.
      */
     public boolean podeAlterarPergunta(String codigo, int docenteId) {
-        // Query otimizada: verifica propriedade e conta respostas num só passo
+
         String sql = "SELECT p.id, (SELECT COUNT(*) FROM Resposta r WHERE r.pergunta_id = p.id) as total_respostas " +
                 "FROM Pergunta p WHERE p.codigo_acesso = ? AND p.docente_id = ?";
 
@@ -620,13 +602,13 @@ public class DatabaseManager {
 
             if (rs.next()) {
                 int totalRespostas = rs.getInt("total_respostas");
-                // Retorna TRUE apenas se o total de respostas for 0
+
                 return totalRespostas == 0;
             }
         } catch (SQLException e) {
             System.err.println("[BD] Erro na verificação de permissões: " + e.getMessage());
         }
-        // Retorna FALSE se a pergunta não for encontrada, não pertencer ao docente ou tiver respostas
+
         return false;
     }
 
@@ -638,9 +620,9 @@ public class DatabaseManager {
             int rows = ps.executeUpdate();
 
             if (rows > 0) {
-                incrementarVersao(); // Importante para o Heartbeat
+                incrementarVersao();
                 System.out.println("[BD] pt.isec.pd.tp.bases.Pergunta eliminada: " + codigo);
-                // Retorna a query SQL exata para os servidores de backup replicarem
+
                 return "DELETE FROM pt.isec.pd.tp.bases.Pergunta WHERE codigo_acesso = '" + codigo + "'";
             }
         } catch (SQLException e) {
@@ -660,9 +642,9 @@ public class DatabaseManager {
             int rows = ps.executeUpdate();
 
             if (rows > 0) {
-                incrementarVersao(); // Importante para o Heartbeat
+                incrementarVersao();
                 System.out.println("[BD] pt.isec.pd.tp.bases.Pergunta editada: " + codigo);
-                // Retorna a query SQL exata para os servidores de backup replicarem
+
                 return String.format("UPDATE pt.isec.pd.tp.bases.Pergunta SET enunciado='%s', inicio='%s', fim='%s' WHERE codigo_acesso='%s'",
                         enunciado, inicio, fim, codigo);
             }
@@ -672,13 +654,12 @@ public class DatabaseManager {
         return null;
     }
 
-    // ... (restante código) ...
 
-    // --- NOVA FUNCIONALIDADE: HISTÓRICO ---
+
+
     public List<HistoricoItem> obterHistoricoEstudante(int estudanteId) {
         List<HistoricoItem> lista = new ArrayList<>();
-        // Query: Junta Resposta, pt.isec.pd.tp.bases.Pergunta e pt.isec.pd.tp.bases.Opcao.
-        // Filtra apenas perguntas onde o prazo (fim) já passou.
+
         String sql = "SELECT p.enunciado, p.codigo_acesso, r.data_hora, r.opcao_escolhida, " +
                 "(SELECT o.opcao_correta FROM Opcao o WHERE o.pergunta_id = p.id AND o.letra_opcao = r.opcao_escolhida) as acertou " +
                 "FROM Resposta r " +
@@ -703,10 +684,10 @@ public class DatabaseManager {
         return lista;
     }
 
-    // --- NOVA FUNCIONALIDADE: ESTATÍSTICAS ---
+
     public String obterEstatisticas(String codigoAcesso) {
         int pId = -1;
-        // 1. Descobrir ID da pergunta
+
         try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM Pergunta WHERE codigo_acesso = ?")) {
             ps.setString(1, codigoAcesso);
             ResultSet rs = ps.executeQuery();
@@ -716,11 +697,11 @@ public class DatabaseManager {
             return "Erro BD.";
         }
 
-        // 2. Calcular Totais
+
         String sqlTotal = "SELECT COUNT(*) FROM Resposta WHERE pergunta_id = ?";
         String sqlCertas = "SELECT COUNT(*) FROM Resposta r " +
                 "JOIN Opcao o ON r.pergunta_id = o.pergunta_id AND r.opcao_escolhida = o.letra_opcao " +
-                "WHERE r.pergunta_id = ? AND o.opcao_correta = 1"; // 1 é true no SQLite
+                "WHERE r.pergunta_id = ? AND o.opcao_correta = 1";
 
         try {
             int total = 0;
@@ -756,7 +737,7 @@ public class DatabaseManager {
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         java.time.LocalDateTime agora = java.time.LocalDateTime.now();
 
-        // LIMPEZA DO FILTRO (Para garantir que não há lixo)
+
         if (filtro == null) filtro = "TODAS";
         filtro = filtro.trim().toUpperCase();
 
@@ -782,7 +763,7 @@ public class DatabaseManager {
 
                     switch (filtro) {
                         case "ATIVAS":
-                            // Começou antes de agora E acaba depois de agora
+
                             if (!inicio.isAfter(agora) && !fim.isBefore(agora)) {
                                 adicionar = true;
                                 motivo = "Aceite (Está a decorrer)";

@@ -21,7 +21,7 @@ public class MulticastListener implements Runnable {
     private InetAddress group;
     private NetworkInterface nif;
 
-    // Construtor
+
     public MulticastListener(Servidor s, DatabaseManager db, String ipMulti, InetAddress ipLocal) {
         this.servidor = s;
         this.db = db;
@@ -36,7 +36,7 @@ public class MulticastListener implements Runnable {
             this.group = InetAddress.getByName("230.30.30.30");
             this.nif = NetworkInterface.getByInetAddress(ipLocal);
 
-            // Junta-se ao grupo Multicast
+
             socket.joinGroup(new InetSocketAddress(group, 3030), nif);
 
             byte[] buffer = new byte[4096];
@@ -47,7 +47,7 @@ public class MulticastListener implements Runnable {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
 
-                // Ignora heartbeats próprios (para evitar loops)
+
                 if (packet.getAddress().equals(ipLocal)) {
                     continue;
                 }
@@ -58,22 +58,18 @@ public class MulticastListener implements Runnable {
                     int localVersion = db.getVersaoBD();
                     int remoteVersion = heartbeat.getVersaoBD();
 
-                    // --- Lógica de Sincronização e Tolerância a Falhas (Requisito Crítico) ---
 
                     if (heartbeat.temQuery()) {
-                        // Heartbeat com Query SQL (de Escrita)
                         if (remoteVersion == localVersion + 1) {
-                            // Versão sequencial correta: Aplica a query
                             db.executarQueryReplica(heartbeat.getQuerySQL());
                         } else {
-                            // Versão incorreta: Perda de sincronização -> TERMINA
+
                             System.err.println("[pt.isec.pd.tp.MulticastListener] ERRO CRÍTICO: Perda de sincronização com o Principal (Versão Local: " + localVersion + ", Versão Remota: " + remoteVersion + " - Query). A TERMINAR.");
                             System.exit(1);
                         }
                     } else {
-                        // Heartbeat Periódico (sem Query)
+
                         if (remoteVersion != localVersion) {
-                            // Versão diferente sem Query: Perda de sincronização -> TERMINA
                             System.err.println("[pt.isec.pd.tp.MulticastListener] ERRO CRÍTICO: Perda de sincronização com o Principal (Versão Local: " + localVersion + ", Versão Remota: " + remoteVersion + " - Periódico). A TERMINAR.");
                             System.exit(1);
                         }
